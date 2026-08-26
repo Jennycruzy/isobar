@@ -1,6 +1,8 @@
 # Telegraph registration record
 
-Status: Miner registered successfully; staged as pending and awaiting Explorer indexing/activation.
+Status: Miner registered successfully and active in the Telegraph Explorer.
+The status and score snapshot below were checked on 2026-08-26 before the
+format-compatibility deployment.
 
 Use `integrate.telegraphprotocol.com` and the wizard; do not hand-write a manifest.
 
@@ -28,4 +30,33 @@ Use `integrate.telegraphprotocol.com` and the wizard; do not hand-write a manife
 - Floor price: `0.01 USDC`
 - Base Sepolia transaction hash: `0xcbb1de99b4ca7997…e4efe1ff` (the Telegraph confirmation screen displayed a shortened hash; retrieve the full value from the wallet or Base Sepolia explorer if needed).
 - Registration ID: `224`
-- Explorer URL and first visible epoch:
+- Explorer URL: `https://explorer.telegraphprotocol.com/miners/224`
+- First visible/scored epoch: `284`
+- Epoch 284 baseline ranks: `WEATHER_CHECK #6/9` (`0.013609781`),
+  `WEATHER_FORECAST #9/11` (`0.002964984`)
+
+## Runtime compatibility
+
+The registered schema uses `q` or `lat`/`lon`. The runtime also accepts the
+evaluator's observed aliases `location` and `city`, plus `latitude` and
+`longitude`, and accepts forecast `start_time`/`end_time` fields. This keeps
+the registered miner usable when Telegraph generates query parameters from
+natural-language questions.
+
+## Scoring evidence
+
+The Explorer's documented `/api/signals?limit=200` path returned HTTP 404 at
+capture time. The equivalent scored records were available through
+`/api/scores?intent=...&epoch=284&limit=200`; the captured details are in
+[`docs/GROUND_TRUTH.md`](../docs/GROUND_TRUTH.md).
+
+The epoch-284 validator called:
+
+```text
+GET /weather?location=Tokyo%2C+Japan
+GET /forecast?city=Tokyo&end_time=2026-09-01T12%3A00%3A00Z&interval=hourly&start_time=2026-09-01T06%3A00%3A00Z&units=metric
+```
+
+The previous release accepted neither place-name alias, so both scored answers
+were the invalid-location fallback. This was the primary cause of the low
+epoch-284 result; formatting improvements are a second-stage optimization.
