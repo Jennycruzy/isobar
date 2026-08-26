@@ -60,3 +60,11 @@ GET /forecast?city=Tokyo&end_time=2026-09-01T12%3A00%3A00Z&interval=hourly&start
 The previous release accepted neither place-name alias, so both scored answers
 were the invalid-location fallback. This was the primary cause of the low
 epoch-284 result; formatting improvements are a second-stage optimization.
+
+## Post-deployment experiment
+
+The alias/format release was installed on 2026-08-26 at 21:19 UTC. The exact
+validator-shaped requests now resolve to Tokyo, return `upstream_ok` data, and
+include the current 24-hour horizon or requested forecast window. The first
+complete epoch after this deployment is the measurement point; no rank-1 claim
+is made until Explorer reports it.

@@ -26,5 +26,5 @@
 
 - Explorer evidence for epoch 284 is captured in [`GROUND_TRUTH.md`](GROUND_TRUTH.md).
 - Registration `#224` is active with zero fetch attempts/retries; the pre-fix ranks were WEATHER_CHECK `#6/9` and WEATHER_FORECAST `#9/11`.
-- The validator used `location` and `city` query aliases that the old handler rejected. The compatibility release now normalizes those aliases, maps forecast time bounds, requests UTC and m/s units, and emits the compact candidate format.
-- The compatibility release is tested locally but still needs to be deployed and observed in a new epoch before its score impact can be claimed.
+- The validator used `location` and `city` query aliases that the old handler rejected. The compatibility release now normalizes those aliases, maps forecast time bounds, requests UTC and m/s units, and emits scorer-facing answers with the requested current/24-hour facts where hourly data is available.
+- The compatibility release is tested locally and deployed; its score impact remains pending until Explorer reports a complete post-deployment epoch.

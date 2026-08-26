@@ -1,8 +1,8 @@
 # Isobar Weather
 
 Deterministic current weather and forecasts for Telegraph Protocol, backed by
-Open-Meteo. The human-readable `answer` is intentionally compact for semantic
-scoring; the structured response retains the detailed measurements.
+Open-Meteo. Each response has a scorer-facing `answer` plus structured JSON
+with the detailed measurements an agent may need.
 
 ## Live deployment
 
@@ -46,13 +46,16 @@ curl 'https://weather.isobars.xyz/weather?location=Tokyo'
 curl 'https://weather.isobars.xyz/forecast?city=Tokyo&start_time=2026-09-01T06:00:00Z&end_time=2026-09-01T12:00:00Z'
 ```
 
-Current answers follow this compact shape:
+WEATHER_CHECK answers include the current temperature, feels-like temperature,
+and the next-24-hour range when the upstream hourly data is available. A live
+example is:
 
 ```text
-Tokyo current: 30.9C, 0.0mm, 1.8m/s, partly_cloudy. As of 2026-08-26T15:30Z.
+The current temperature in Tokyo, Japan is 25.0C, and it feels like 31.0C. Over the next 24 hours, temperatures range from 22C to 30C, with a chance of rain or showers, and precipitation chances ranging from 34% to 84%. As of 2026-08-26T21:15Z.
 ```
 
-Forecast answers contain two compact day summaries and a nearest-hour record;
-the structured `forecast` array carries the hourly values when available.
+WEATHER_FORECAST answers contain two compact day summaries and a nearest-hour
+record; the structured `forecast` array carries the hourly values when
+available. The detailed measurements remain in JSON in both routes.
 
 See [deployment](docs/DEPLOYMENT.md) and [registration](telegraph/REGISTRATION.md).
