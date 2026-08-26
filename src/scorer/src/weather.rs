@@ -28,9 +28,13 @@ const UNIT_CELSIUS: u8 = 1;
 const UNIT_FAHRENHEIT: u8 = 2;
 const UNIT_PERCENT: u8 = 3;
 const UNIT_MM: u8 = 4;
-const UNIT_SPEED: u8 = 5;
+const UNIT_SPEED_MS: u8 = 5;
 const UNIT_DEGREE: u8 = 6;
 const UNIT_PRESSURE: u8 = 7;
+const UNIT_SPEED_KMH: u8 = 8;
+const UNIT_SPEED_MPH: u8 = 9;
+
+const CONTEXT_SLOTS: usize = 3;
 
 #[derive(Clone, Copy)]
 struct Fact {
@@ -38,6 +42,8 @@ struct Fact {
     qualifier: u8,
     unit: u8,
     value: f32,
+    context: [u32; CONTEXT_SLOTS],
+    context_len: u8,
 }
 
 impl Fact {
@@ -46,6 +52,8 @@ impl Fact {
         qualifier: QUAL_NONE,
         unit: UNIT_NONE,
         value: 0.0,
+        context: [0; CONTEXT_SLOTS],
+        context_len: 0,
     };
 
     #[inline]
@@ -59,6 +67,15 @@ impl Fact {
             self.value * 5.0 / 9.0 - 32.0 * 5.0 / 9.0
         } else {
             self.value
+        }
+    }
+
+    #[inline]
+    fn wind_ms(self) -> f32 {
+        match self.unit {
+            UNIT_SPEED_KMH => self.value / 3.6,
+            UNIT_SPEED_MPH => self.value * 0.44704,
+            _ => self.value,
         }
     }
 }
@@ -157,6 +174,137 @@ fn skip_space(bytes: &[u8], mut index: usize) -> usize {
     index
 }
 
+fn token_equals(bytes: &[u8], needle: &[u8]) -> bool {
+    if bytes.len() != needle.len() {
+        return false;
+    }
+    let mut index = 0;
+    while index < bytes.len() {
+        if lower(bytes[index]) != needle[index] {
+            return false;
+        }
+        index += 1;
+    }
+    true
+}
+
+fn is_stopword(bytes: &[u8]) -> bool {
+    let words = [
+        b"a".as_slice(),
+        b"an".as_slice(),
+        b"and".as_slice(),
+        b"as".as_slice(),
+        b"at".as_slice(),
+        b"by".as_slice(),
+        b"for".as_slice(),
+        b"from".as_slice(),
+        b"in".as_slice(),
+        b"is".as_slice(),
+        b"of".as_slice(),
+        b"on".as_slice(),
+        b"or".as_slice(),
+        b"the".as_slice(),
+        b"to".as_slice(),
+        b"with".as_slice(),
+    ];
+    let mut index = 0;
+    while index < words.len() {
+        if token_equals(bytes, words[index]) {
+            return true;
+        }
+        index += 1;
+    }
+    false
+}
+
+fn is_unit_token(bytes: &[u8]) -> bool {
+    let units = [
+        b"c".as_slice(),
+        b"f".as_slice(),
+        b"hpa".as_slice(),
+        b"km".as_slice(),
+        b"m".as_slice(),
+        b"mm".as_slice(),
+        b"mph".as_slice(),
+        b"s".as_slice(),
+    ];
+    let mut index = 0;
+    while index < units.len() {
+        if token_equals(bytes, units[index]) {
+            return true;
+        }
+        index += 1;
+    }
+    false
+}
+
+fn token_hash(bytes: &[u8], start: usize, end: usize) -> u32 {
+    let mut hash = 2_166_136_261u32;
+    let mut index = start;
+    while index < end {
+        hash ^= lower(bytes[index]) as u32;
+        hash = hash.wrapping_mul(16_777_619);
+        index += 1;
+    }
+    hash
+}
+
+/// Extract at most two non-stopword tokens before a number and one after it.
+/// The fixed token hashes are the context key used by the pairing pass; they
+/// avoid positional guesses when a response contains several temperatures.
+fn context_key(
+    bytes: &[u8],
+    number_start: usize,
+    number_end: usize,
+) -> ([u32; CONTEXT_SLOTS], u8) {
+    let mut key = [0; CONTEXT_SLOTS];
+    let mut len = 0usize;
+    let left = number_start.saturating_sub(56);
+    let mut index = left;
+    while index < number_start {
+        while index < number_start && !is_word(bytes[index]) {
+            index += 1;
+        }
+        let token_start = index;
+        while index < number_start && is_word(bytes[index]) {
+            index += 1;
+        }
+        if token_start < index {
+            let token = &bytes[token_start..index];
+            if !is_stopword(token) && !is_unit_token(token) {
+                if len < 2 {
+                    key[len] = token_hash(bytes, token_start, index);
+                    len += 1;
+                } else {
+                    key[0] = key[1];
+                    key[1] = token_hash(bytes, token_start, index);
+                }
+            }
+        }
+    }
+    index = number_end;
+    let right = core::cmp::min(bytes.len(), number_end.saturating_add(40));
+    while index < right && !is_word(bytes[index]) {
+        index += 1;
+    }
+    let token_start = index;
+    while index < right && is_word(bytes[index]) {
+        index += 1;
+    }
+    if token_start < index {
+        let token = &bytes[token_start..index];
+        if !is_stopword(token) && !is_unit_token(token) {
+            if len < CONTEXT_SLOTS {
+                key[len] = token_hash(bytes, token_start, index);
+                len += 1;
+            } else {
+                key[CONTEXT_SLOTS - 1] = token_hash(bytes, token_start, index);
+            }
+        }
+    }
+    (key, len as u8)
+}
+
 fn parse_number(bytes: &[u8], start: usize) -> Option<(usize, f32)> {
     let mut index = start;
     let mut negative = false;
@@ -232,13 +380,19 @@ fn unit_and_kind(bytes: &[u8], start: usize, end: usize, context: &[u8]) -> (u8,
         && bytes[after + 2] == b'/'
         && lower(bytes[after + 3]) == b'h'
     {
-        unit = UNIT_SPEED;
-    } else if after + 3 < bytes.len()
+        unit = UNIT_SPEED_KMH;
+    } else if after + 2 < bytes.len()
         && lower(bytes[after]) == b'm'
         && lower(bytes[after + 1]) == b'p'
         && lower(bytes[after + 2]) == b'h'
     {
-        unit = UNIT_SPEED;
+        unit = UNIT_SPEED_MPH;
+    } else if after + 2 < bytes.len()
+        && lower(bytes[after]) == b'm'
+        && bytes[after + 1] == b'/'
+        && lower(bytes[after + 2]) == b's'
+    {
+        unit = UNIT_SPEED_MS;
     } else if after + 2 < bytes.len()
         && lower(bytes[after]) == b'h'
         && lower(bytes[after + 1]) == b'p'
@@ -290,7 +444,11 @@ fn unit_and_kind(bytes: &[u8], start: usize, end: usize, context: &[u8]) -> (u8,
         && has_any_word(context, &precipitation_words)
     {
         KIND_PRECIPITATION
-    } else if unit == UNIT_SPEED || has_any_word(context, &wind_words) {
+    } else if unit == UNIT_SPEED_MS
+        || unit == UNIT_SPEED_KMH
+        || unit == UNIT_SPEED_MPH
+        || has_any_word(context, &wind_words)
+    {
         KIND_WIND_SPEED
     } else if unit == UNIT_DEGREE && has_any_word(context, &wind_words) {
         KIND_WIND_DIRECTION
@@ -356,13 +514,19 @@ fn collect_facts(bytes: &[u8]) -> FactBuffer {
                 && bytes[after + 2] == b'/'
                 && lower(bytes[after + 3]) == b'h'
             {
-                UNIT_SPEED
+                UNIT_SPEED_KMH
             } else if after + 2 < bytes.len()
                 && lower(bytes[after]) == b'm'
                 && lower(bytes[after + 1]) == b'p'
                 && lower(bytes[after + 2]) == b'h'
             {
-                UNIT_SPEED
+                UNIT_SPEED_MPH
+            } else if after + 2 < bytes.len()
+                && lower(bytes[after]) == b'm'
+                && bytes[after + 1] == b'/'
+                && lower(bytes[after + 2]) == b's'
+            {
+                UNIT_SPEED_MS
             } else if after + 2 < bytes.len()
                 && lower(bytes[after]) == b'h'
                 && lower(bytes[after + 1]) == b'p'
@@ -372,11 +536,14 @@ fn collect_facts(bytes: &[u8]) -> FactBuffer {
             } else {
                 UNIT_NONE
             };
+            let (context, context_len) = context_key(bytes, number_start, number_end);
             facts.push(Fact {
                 kind,
                 qualifier,
                 unit,
                 value,
+                context,
+                context_len,
             });
         }
         index = if number_end > index {
@@ -401,8 +568,33 @@ fn weather_signal(bytes: &[u8]) -> bool {
             b"rain",
             b"snow",
             b"cloud",
+            b"cloudy",
             b"overcast",
             b"thunderstorm",
+            b"clear",
+            b"mainly_clear",
+            b"partly_cloudy",
+            b"fog",
+            b"depositing_rime_fog",
+            b"light_drizzle",
+            b"moderate_drizzle",
+            b"dense_drizzle",
+            b"light_freezing_drizzle",
+            b"dense_freezing_drizzle",
+            b"slight_rain",
+            b"moderate_rain",
+            b"heavy_rain",
+            b"slight_rain_showers",
+            b"moderate_rain_showers",
+            b"violent_rain_showers",
+            b"light_freezing_rain",
+            b"heavy_freezing_rain",
+            b"slight_snow_fall",
+            b"moderate_snow_fall",
+            b"heavy_snow_fall",
+            b"snow_grains",
+            b"slight_snow_showers",
+            b"heavy_snow_showers",
             b"celsius",
             b"fahrenheit",
         ],
@@ -420,12 +612,44 @@ fn condition_polarity(bytes: &[u8]) -> u8 {
             b"snow",
             b"hail",
             b"thunderstorm",
+            b"light_drizzle",
+            b"moderate_drizzle",
+            b"dense_drizzle",
+            b"light_freezing_drizzle",
+            b"dense_freezing_drizzle",
+            b"slight_rain",
+            b"moderate_rain",
+            b"heavy_rain",
+            b"slight_rain_showers",
+            b"moderate_rain_showers",
+            b"violent_rain_showers",
+            b"light_freezing_rain",
+            b"heavy_freezing_rain",
+            b"slight_snow_fall",
+            b"moderate_snow_fall",
+            b"heavy_snow_fall",
+            b"snow_grains",
+            b"slight_snow_showers",
+            b"heavy_snow_showers",
+            b"thunderstorm_with_slight_hail",
+            b"thunderstorm_with_heavy_hail",
         ],
     ) {
         2
-    } else if has_any_word(bytes, &[b"clear", b"sunny", b"sunshine"]) {
+    } else if has_any_word(bytes, &[b"clear", b"mainly_clear", b"sunny", b"sunshine"]) {
         1
-    } else if has_any_word(bytes, &[b"overcast", b"cloudy", b"cloud", b"fog", b"mist"]) {
+    } else if has_any_word(
+        bytes,
+        &[
+            b"overcast",
+            b"cloudy",
+            b"cloud",
+            b"partly_cloudy",
+            b"fog",
+            b"mist",
+            b"depositing_rime_fog",
+        ],
+    ) {
         3
     } else {
         0
@@ -436,7 +660,7 @@ fn score_fact(reference: Fact, candidate: Fact) -> f32 {
     let difference = match reference.kind {
         KIND_TEMPERATURE => (reference.temperature_c() - candidate.temperature_c()).abs(),
         KIND_HUMIDITY | KIND_CLOUD | KIND_PROBABILITY => (reference.value - candidate.value).abs(),
-        KIND_WIND_SPEED => (reference.value - candidate.value).abs(),
+        KIND_WIND_SPEED => (reference.wind_ms() - candidate.wind_ms()).abs(),
         KIND_WIND_DIRECTION => {
             let delta = (reference.value - candidate.value).abs();
             if delta > 180.0 {
@@ -477,7 +701,12 @@ fn score_fact(reference: Fact, candidate: Fact) -> f32 {
             }
         }
         KIND_WIND_SPEED => {
-            if difference <= 2.0 {
+            if reference.unit != UNIT_NONE
+                && candidate.unit != UNIT_NONE
+                && reference.unit != candidate.unit
+            {
+                -0.08
+            } else if difference <= 2.0 {
                 0.012
             } else {
                 -0.035
@@ -508,8 +737,23 @@ fn score_fact(reference: Fact, candidate: Fact) -> f32 {
     }
 }
 
+fn context_matches(left: Fact, right: Fact) -> bool {
+    if left.context_len == 0 || left.context_len != right.context_len {
+        return false;
+    }
+    let mut index = 0;
+    while index < left.context_len as usize {
+        if left.context[index] != right.context[index] {
+            return false;
+        }
+        index += 1;
+    }
+    true
+}
+
 fn pair_score(reference: FactBuffer, candidate: FactBuffer) -> f32 {
-    let mut used = [false; MAX_FACTS];
+    let mut used_reference = [false; MAX_FACTS];
+    let mut used_candidate = [false; MAX_FACTS];
     let mut total = 0.0;
     let mut reference_index = 0;
     while reference_index < reference.len {
@@ -517,14 +761,18 @@ fn pair_score(reference: FactBuffer, candidate: FactBuffer) -> f32 {
         let mut found = None;
         let mut candidate_index = 0;
         while candidate_index < candidate.len {
-            if !used[candidate_index] && candidate.values[candidate_index].key() == fact.key() {
+            if !used_candidate[candidate_index]
+                && candidate.values[candidate_index].key() == fact.key()
+                && context_matches(fact, candidate.values[candidate_index])
+            {
                 found = Some(candidate_index);
                 break;
             }
             candidate_index += 1;
         }
         if let Some(index) = found {
-            used[index] = true;
+            used_reference[reference_index] = true;
+            used_candidate[index] = true;
             total += score_fact(fact, candidate.values[index]);
         }
         reference_index += 1;
@@ -537,14 +785,14 @@ fn pair_score(reference: FactBuffer, candidate: FactBuffer) -> f32 {
         let mut candidate_count = 0;
         let mut index = 0;
         while index < reference.len {
-            if reference.values[index].kind == kind {
+            if reference.values[index].kind == kind && !used_reference[index] {
                 reference_count += 1;
             }
             index += 1;
         }
         index = 0;
         while index < candidate.len {
-            if candidate.values[index].kind == kind && !used[index] {
+            if candidate.values[index].kind == kind && !used_candidate[index] {
                 candidate_count += 1;
             }
             index += 1;
@@ -553,16 +801,18 @@ fn pair_score(reference: FactBuffer, candidate: FactBuffer) -> f32 {
             let mut ref_index = 0;
             let mut cand_index = 0;
             while ref_index < reference.len {
-                if reference.values[ref_index].kind == kind {
+                if reference.values[ref_index].kind == kind && !used_reference[ref_index] {
                     while cand_index < candidate.len
-                        && (used[cand_index] || candidate.values[cand_index].kind != kind)
+                        && (used_candidate[cand_index]
+                            || candidate.values[cand_index].kind != kind)
                     {
                         cand_index += 1;
                     }
                     if cand_index < candidate.len {
                         total +=
                             score_fact(reference.values[ref_index], candidate.values[cand_index]);
-                        used[cand_index] = true;
+                        used_reference[ref_index] = true;
+                        used_candidate[cand_index] = true;
                         cand_index += 1;
                     }
                 }
@@ -725,6 +975,21 @@ mod tests {
         let candidate =
             b"Weather in Lagos: 25.8\xC2\xB0C (78.4\xC2\xB0F), 77% humidity and 18.4 km/h wind.";
         assert_eq!(adjustment(b"weather in Lagos", reference, candidate), 0.0);
+    }
+
+    #[test]
+    fn snake_case_conditions_and_metric_wind_units_are_checked() {
+        let reference = b"Tokyo current: 30.0C, 0.0mm, 3.4m/s, partly_cloudy.";
+        let candidate = b"Tokyo current: 30.0C, 0.0mm, 12.2km/h, heavy_rain.";
+        let value = adjustment(b"weather in Tokyo", reference, candidate);
+        assert!(value < -0.1, "adjustment was {value}");
+    }
+
+    #[test]
+    fn equivalent_wind_speed_still_exposes_a_unit_mismatch() {
+        let reference = b"Weather in Lagos: 18.4 km/h wind.";
+        let candidate = b"Weather in Lagos: 5.1m/s wind.";
+        assert!(adjustment(b"weather in Lagos", reference, candidate) < 0.0);
     }
 
     #[test]
