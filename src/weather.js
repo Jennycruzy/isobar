@@ -14,6 +14,19 @@ export const WMO = new Map([
   [99, 'Thunderstorm with heavy hail']
 ]);
 
+const WMO_SLUG = new Map([
+  [0, 'clear'], [1, 'mainly_clear'], [2, 'partly_cloudy'], [3, 'overcast'],
+  [45, 'fog'], [48, 'depositing_rime_fog'], [51, 'light_drizzle'],
+  [53, 'moderate_drizzle'], [55, 'dense_drizzle'], [56, 'light_freezing_drizzle'],
+  [57, 'dense_freezing_drizzle'], [61, 'slight_rain'], [63, 'moderate_rain'],
+  [65, 'heavy_rain'], [66, 'light_freezing_rain'], [67, 'heavy_freezing_rain'],
+  [71, 'slight_snow_fall'], [73, 'moderate_snow_fall'], [75, 'heavy_snow_fall'],
+  [77, 'snow_grains'], [80, 'slight_rain_showers'], [81, 'moderate_rain_showers'],
+  [82, 'violent_rain_showers'], [85, 'slight_snow_showers'], [86, 'heavy_snow_showers'],
+  [95, 'thunderstorm'], [96, 'thunderstorm_with_slight_hail'],
+  [99, 'thunderstorm_with_heavy_hail']
+]);
+
 const COMPASS = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
 const LONG_COMPASS = ['north','north-northeast','northeast','east-northeast','east','east-southeast','southeast','south-southeast','south','south-southwest','southwest','west-southwest','west','west-northwest','northwest','north-northwest'];
 
@@ -24,6 +37,10 @@ export function compass(deg) {
 
 export function conditions(code) {
   return WMO.get(Number(code)) ?? `unknown conditions (code ${code})`;
+}
+
+export function conditionSlug(code) {
+  return WMO_SLUG.get(Number(code)) ?? `unknown_${code}`;
 }
 
 export class LruCache {
@@ -45,6 +62,69 @@ function integer(value) { return Math.round(Number(value)).toString(); }
 function fahrenheit(c) { return one(Number(c) * 9 / 5 + 32); }
 function label(location) { return [location.name, location.admin1, location.country].filter(Boolean).join(', '); }
 function unit(units, key, fallback = '') { return units?.[key] ?? fallback; }
+function scalar(value) { return Array.isArray(value) ? value[0] : value; }
+function nonEmpty(value) {
+  const text = scalar(value);
+  return text !== undefined && text !== null && String(text).trim() ? String(text).trim() : undefined;
+}
+
+export function normalizeInput(input = {}) {
+  const q = nonEmpty(input.q) ?? nonEmpty(input.location) ?? nonEmpty(input.city) ?? nonEmpty(input.place);
+  const lat = scalar(input.lat) ?? scalar(input.latitude);
+  const lon = scalar(input.lon) ?? scalar(input.longitude);
+  return { ...input, q, lat, lon };
+}
+
+function windMs(value, sourceUnit = '') {
+  const speed = Number(value);
+  const unitText = String(sourceUnit).toLowerCase();
+  if (unitText.includes('km')) return speed / 3.6;
+  if (unitText.includes('mph')) return speed * 0.44704;
+  return speed;
+}
+
+function utcDate(value, timezone = 'UTC') {
+  if (!value) return null;
+  const text = String(value);
+  if (/[zZ]|[+-]\d\d(?::?\d\d)?$/.test(text)) {
+    const date = new Date(text);
+    return Number.isFinite(date.getTime()) ? date : null;
+  }
+  const local = text.length === 16 ? `${text}:00` : text;
+  const assumedUtc = new Date(`${local}Z`);
+  if (!Number.isFinite(assumedUtc.getTime())) return null;
+  if (!timezone || timezone === 'UTC') return assumedUtc;
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone, hour12: false, hourCycle: 'h23',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit'
+    }).formatToParts(assumedUtc);
+    const get = (type) => Number(parts.find((part) => part.type === type)?.value);
+    const asUtc = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'), get('second'));
+    return new Date(assumedUtc.getTime() - (asUtc - assumedUtc.getTime()));
+  } catch {
+    return assumedUtc;
+  }
+}
+
+function isoMinute(value, timezone = 'UTC') {
+  const date = utcDate(value, timezone);
+  return date ? `${date.toISOString().slice(0, 16)}Z` : String(value);
+}
+
+function datePart(value) {
+  const match = String(scalar(value) ?? '').match(/^\d{4}-\d{2}-\d{2}/);
+  return match?.[0];
+}
+
+function nextDate(value) {
+  const date = new Date(`${value}T12:00:00Z`);
+  if (!Number.isFinite(date.getTime())) return value;
+  date.setUTCDate(date.getUTCDate() + 1);
+  return date.toISOString().slice(0, 10);
+}
+
 function conditionPhrase(code) {
   const text = conditions(code).toLowerCase();
   if (text.endsWith(' sky')) return `${text.slice(0, -4)} skies`;
@@ -56,24 +136,14 @@ export function currentPayload(location, body, retrievedAt, stale = false) {
   location = { ...location, timezone: location.timezone === 'auto' || !location.timezone ? body.timezone : location.timezone };
   const c = body.current ?? {};
   const u = body.current_units ?? {};
-  let answer = present(c.temperature_2m)
-    ? `The current temperature in ${label(location)} is ${one(c.temperature_2m)}${unit(u, 'temperature_2m')} (${fahrenheit(c.temperature_2m)}°F)`
-    : `Current conditions in ${label(location)}`;
-  if (present(c.relative_humidity_2m)) answer += ` with ${integer(c.relative_humidity_2m)}${unit(u, 'relative_humidity_2m')} relative humidity`;
-  if (present(c.apparent_temperature)) answer += `, feeling like ${one(c.apparent_temperature)}${unit(u, 'apparent_temperature')}`;
+  const parts = [];
+  if (present(c.temperature_2m)) parts.push(`${one(c.temperature_2m)}C`);
+  if (present(c.precipitation)) parts.push(`${one(c.precipitation)}mm`);
+  if (present(c.wind_speed_10m)) parts.push(`${one(windMs(c.wind_speed_10m, unit(u, 'wind_speed_10m')))}m/s`);
+  if (present(c.weather_code)) parts.push(conditionSlug(c.weather_code));
+  let answer = `${location.name ?? label(location)} current: ${parts.join(', ')}`;
+  if (c.time) answer += `. As of ${isoMinute(c.time, body.timezone ?? 'UTC')}`;
   answer += '.';
-  if (present(c.wind_speed_10m)) {
-    const direction = present(c.wind_direction_10m) ? compass(c.wind_direction_10m) : null;
-    answer += ` Winds are ${one(c.wind_speed_10m)} ${unit(u, 'wind_speed_10m')}${direction ? ` from the ${direction.long} (${integer(c.wind_direction_10m)}°)` : ''}.`;
-  }
-  const extras = [];
-  if (present(c.precipitation)) extras.push(`${one(c.precipitation)} ${unit(u, 'precipitation')} precipitation`);
-  if (present(c.cloud_cover)) extras.push(`${integer(c.cloud_cover)}${unit(u, 'cloud_cover')} cloud cover`);
-  if (extras.length) answer += ` There is ${extras.join(' and ')}`;
-  if (present(c.weather_code)) answer += `${extras.length ? ',' : ' Conditions are'} under ${conditionPhrase(c.weather_code)}`;
-  if (extras.length || present(c.weather_code)) answer += '.';
-  if (present(c.surface_pressure)) answer += ` Surface pressure is ${one(c.surface_pressure)} ${unit(u, 'surface_pressure')}.`;
-  if (c.time) answer += ` These conditions were observed at ${c.time} local time in the ${location.timezone ?? body.timezone ?? 'local'} timezone.`;
   if (stale) answer += ' This is the most recent cached observation because the live weather service is temporarily unavailable.';
   return {
     answer,
@@ -84,37 +154,74 @@ export function currentPayload(location, body, retrievedAt, stale = false) {
       apparent_temperature_c: present(c.apparent_temperature) ? Number(one(c.apparent_temperature)) : undefined,
       relative_humidity_pct: present(c.relative_humidity_2m) ? Number(integer(c.relative_humidity_2m)) : undefined,
       precipitation_mm: present(c.precipitation) ? Number(one(c.precipitation)) : undefined,
-      wind_speed_kmh: present(c.wind_speed_10m) ? Number(one(c.wind_speed_10m)) : undefined,
+      wind_speed_ms: present(c.wind_speed_10m) ? Number(one(windMs(c.wind_speed_10m, unit(u, 'wind_speed_10m')))) : undefined,
+      wind_speed_kmh: present(c.wind_speed_10m) ? Number(one(windMs(c.wind_speed_10m, unit(u, 'wind_speed_10m')) * 3.6)) : undefined,
       wind_direction_deg: present(c.wind_direction_10m) ? Number(integer(c.wind_direction_10m)) : undefined,
       wind_direction_compass: present(c.wind_direction_10m) ? compass(c.wind_direction_10m).short : undefined,
       surface_pressure_hpa: present(c.surface_pressure) ? Number(one(c.surface_pressure)) : undefined,
       cloud_cover_pct: present(c.cloud_cover) ? Number(integer(c.cloud_cover)) : undefined,
       weather_code: present(c.weather_code) ? Number(c.weather_code) : undefined,
       conditions: present(c.weather_code) ? conditions(c.weather_code) : undefined,
+      condition_slug: present(c.weather_code) ? conditionSlug(c.weather_code) : undefined,
       observed_at: c.time
     },
     source: 'open-meteo', retrieved_at: stale ? `${retrievedAt} (stale)` : retrievedAt
   };
 }
 
-export function forecastPayload(location, body, days, retrievedAt, stale = false) {
+function forecastRows(body) {
+  const h = body.hourly ?? {};
+  const hu = body.hourly_units ?? {};
+  const times = h.time ?? [];
+  const timezone = body.timezone ?? 'UTC';
+  const rows = [];
+  for (let i = 0; i < times.length; i++) {
+    const row = { time: isoMinute(times[i], timezone) };
+    if (present(h.temperature_2m?.[i])) row.temp_c = Number(one(h.temperature_2m[i]));
+    if (present(h.precipitation?.[i])) row.precip_mm = Number(one(h.precipitation[i]));
+    if (present(h.wind_speed_10m?.[i])) row.wind_ms = Number(one(windMs(h.wind_speed_10m[i], hu.wind_speed_10m ?? 'm/s')));
+    if (present(h.weather_code?.[i])) row.conditions = conditionSlug(h.weather_code[i]);
+    rows.push(row);
+  }
+  return rows;
+}
+
+function nearestRow(rows, target) {
+  if (!rows.length) return null;
+  const targetDate = utcDate(target) ?? new Date();
+  return rows.reduce((best, row) => {
+    const bestDistance = Math.abs((utcDate(best.time)?.getTime() ?? 0) - targetDate.getTime());
+    const distance = Math.abs((utcDate(row.time)?.getTime() ?? 0) - targetDate.getTime());
+    return distance < bestDistance ? row : best;
+  });
+}
+
+export function forecastPayload(location, body, days, retrievedAt, stale = false, options = {}) {
   location = { ...location, timezone: location.timezone === 'auto' || !location.timezone ? body.timezone : location.timezone };
   const d = body.daily ?? {}; const u = body.daily_units ?? {};
   const count = Math.min(days, d.time?.length ?? 0); const sentences = [];
   for (let i = 0; i < count; i++) {
-    const date = new Date(`${d.time[i]}T12:00:00Z`);
-    let sentence = `${date.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' })}`;
-    if (present(d.temperature_2m_max?.[i])) sentence += `, high ${one(d.temperature_2m_max[i])}${unit(u, 'temperature_2m_max')} (${fahrenheit(d.temperature_2m_max[i])}°F)`;
-    if (present(d.temperature_2m_min?.[i])) sentence += `, low ${one(d.temperature_2m_min[i])}${unit(u, 'temperature_2m_min')} (${fahrenheit(d.temperature_2m_min[i])}°F)`;
-    if (present(d.precipitation_sum?.[i])) sentence += `, ${one(d.precipitation_sum[i])} ${unit(u, 'precipitation_sum')} precipitation`;
-    if (present(d.precipitation_probability_max?.[i])) sentence += ` with ${integer(d.precipitation_probability_max[i])}${unit(u, 'precipitation_probability_max')} chance`;
-    if (present(d.wind_speed_10m_max?.[i])) sentence += `, winds to ${one(d.wind_speed_10m_max[i])} ${unit(u, 'wind_speed_10m_max')}`;
-    if (present(d.weather_code?.[i])) sentence += `, ${conditionPhrase(d.weather_code[i])}`;
-    sentences.push(sentence + '.');
+    const labelText = i === 0 ? 'today' : i === 1 ? 'tomorrow' : d.time[i];
+    const facts = [`${labelText}`];
+    if (present(d.temperature_2m_max?.[i])) facts.push(`high ${integer(d.temperature_2m_max[i])}C`);
+    if (present(d.temperature_2m_min?.[i])) facts.push(`low ${integer(d.temperature_2m_min[i])}C`);
+    if (present(d.weather_code?.[i])) facts.push(conditionSlug(d.weather_code[i]));
+    sentences.push(facts.join(' '));
   }
-  let answer = `The ${count}-day forecast for ${label(location)}: ${sentences.join(' ')}`;
+  const rows = forecastRows(body);
+  const nearest = nearestRow(rows, options.requestStart ?? retrievedAt);
+  let answer = `${location.name ?? label(location)} forecast: ${sentences.join('; ')}`;
+  if (nearest) {
+    const nearestFacts = [];
+    if (present(nearest.temp_c)) nearestFacts.push(`${one(nearest.temp_c)}C`);
+    if (present(nearest.precip_mm)) nearestFacts.push(`${one(nearest.precip_mm)}mm`);
+    if (present(nearest.wind_ms)) nearestFacts.push(`${one(nearest.wind_ms)}m/s`);
+    if (nearest.conditions) nearestFacts.push(nearest.conditions);
+    answer += `. Nearest hour ${nearest.time}: ${nearestFacts.join(', ')}`;
+  }
+  answer += '.';
   if (stale) answer += ' This is the most recent cached forecast because the live weather service is temporarily unavailable.';
-  return { answer, location, daily: d, daily_units: u, source: 'open-meteo', retrieved_at: stale ? `${retrievedAt} (stale)` : retrievedAt };
+  return { answer, location, daily: d, daily_units: u, forecast: rows, source: 'open-meteo', retrieved_at: stale ? `${retrievedAt} (stale)` : retrievedAt };
 }
 
 export function createWeatherService({ fetchImpl = fetch, logger = console, now = () => new Date() } = {}) {
@@ -135,6 +242,7 @@ export function createWeatherService({ fetchImpl = fetch, logger = console, now 
   }
   async function locate(input, signal) {
     if (input.lat !== undefined && input.lon !== undefined) return { name: `${Number(input.lat).toFixed(4)}, ${Number(input.lon).toFixed(4)}`, latitude: Number(input.lat), longitude: Number(input.lon) };
+    if (!input.q) return null;
     const key = input.q.trim().toLocaleLowerCase('en-US'); const cached = geocodes.get(key); if (cached) return cached;
     const url = new URL(GEO_URL); url.search = new URLSearchParams({ name: input.q, count: '1', language: 'en', format: 'json' });
     const data = await upstream(url, signal); const found = data.results?.[0] ?? null;
@@ -145,23 +253,40 @@ export function createWeatherService({ fetchImpl = fetch, logger = console, now 
     if (location) geocodes.set(key, location); return location;
   }
   async function query(kind, input, signal) {
+    input = normalizeInput(input);
     const location = await locate(input, signal);
-    if (!location) return { answer: `The location “${input.q}” was not found, so current weather data is unavailable. Please check the spelling or provide latitude and longitude.`, location: null, source: 'open-meteo', retrieved_at: now().toISOString() };
-    const days = Math.min(7, Math.max(1, Number.parseInt(input.days ?? '3', 10) || 3));
+    if (!location) return { answer: `The location “${input.q ?? 'provided input'}” was not found, so current weather data is unavailable. Please check the spelling or provide latitude and longitude.`, location: null, source: 'open-meteo', retrieved_at: now().toISOString() };
+    const days = Math.min(7, Math.max(1, Number.parseInt(input.days ?? '2', 10) || 2));
     const coord = `${Number(location.latitude).toFixed(4)},${Number(location.longitude).toFixed(4)}`;
-    const key = `${kind}:${coord}:${kind === 'forecast' ? days : ''}`; const hit = weather.get(key);
+    const requestStart = scalar(input.start_time) ?? scalar(input.startTime) ?? scalar(input.start);
+    const requestEnd = scalar(input.end_time) ?? scalar(input.endTime) ?? scalar(input.end);
+    const startDate = datePart(requestStart); const endDate = datePart(requestEnd);
+    const fetchEndDate = kind === 'forecast' && startDate
+      ? (endDate && endDate > startDate ? endDate : nextDate(startDate))
+      : endDate;
+    const key = `${kind}:${coord}:${kind === 'forecast' ? `${days}:${startDate ?? ''}:${fetchEndDate ?? ''}` : ''}`; const hit = weather.get(key);
     if (hit && now().getTime() - hit.cachedAt < 60_000) return hit.payload;
-    const url = new URL(FORECAST_URL); const params = { latitude: location.latitude, longitude: location.longitude, timezone: 'auto' };
+    const url = new URL(FORECAST_URL); const params = { latitude: location.latitude, longitude: location.longitude, timezone: 'UTC', wind_speed_unit: 'ms' };
     if (kind === 'current') params.current = 'temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure,cloud_cover';
-    else Object.assign(params, { daily: 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max', forecast_days: String(days) });
+    else {
+      Object.assign(params, {
+        daily: 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max',
+        hourly: 'temperature_2m,precipitation,weather_code,wind_speed_10m'
+      });
+      if (startDate) {
+        params.start_date = startDate;
+        params.end_date = fetchEndDate ?? nextDate(startDate);
+      } else params.forecast_days = String(days);
+    }
     url.search = new URLSearchParams(params);
     try {
       const body = await upstream(url, signal); const retrievedAt = now().toISOString();
-      const payload = kind === 'current' ? currentPayload(location, body, retrievedAt) : forecastPayload(location, body, days, retrievedAt);
-      weather.set(key, { payload, cachedAt: now().getTime() }); stale.set(key, { body, location, retrievedAt }); return payload;
+      const options = { requestStart };
+      const payload = kind === 'current' ? currentPayload(location, body, retrievedAt) : forecastPayload(location, body, days, retrievedAt, false, options);
+      weather.set(key, { payload, cachedAt: now().getTime() }); stale.set(key, { body, location, retrievedAt, options }); return payload;
     } catch (error) {
       const old = stale.get(key); if (!old) throw error;
-      return kind === 'current' ? currentPayload(old.location, old.body, old.retrievedAt, true) : forecastPayload(old.location, old.body, days, old.retrievedAt, true);
+      return kind === 'current' ? currentPayload(old.location, old.body, old.retrievedAt, true) : forecastPayload(old.location, old.body, days, old.retrievedAt, true, old.options);
     }
   }
   return { query, probe: async (signal) => { const url = new URL(FORECAST_URL); url.search = new URLSearchParams({ latitude: '0', longitude: '0', current: 'temperature_2m', timezone: 'auto' }); await upstream(url, signal); return true; } };
