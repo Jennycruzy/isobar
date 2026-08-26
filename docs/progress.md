@@ -18,5 +18,13 @@
 - Lightsail TCP/443 ingress is now enabled; `https://weather.isobars.xyz/health` returns HTTP 200 with `upstream_ok: true` from outside the VPS.
 - Final HTTPS smoke test passed for `https://weather.isobars.xyz/weather?q=Gujranwala`; certificate and nginx redirect are live.
 - Telegraph registration now awaits only the wizard submission with a funded Base Sepolia wallet.
-- Continued Track 2 preparation in `/Users/user/assay` while DNS propagates: added bounded deterministic weather typed-fact adjustments, preserving the baseline path for non-weather text.
-- Assay checks: 11 Rust tests pass, release WASM builds, and wazero compiler smoke test passes after 10 repeated calls; the 400-record Explorer weather scan includes the Gujranwala signal.
+- Continued Track 2 preparation in `src/scorer/`: added bounded deterministic weather typed-fact adjustments, preserving the baseline path for non-weather text.
+- The scorer is now part of the Isobar repository, with its lockfile, weights, corpus, native harness, and wazero tester committed in `c7157b0`.
+- Scorer checks: 11 Rust tests pass; release WASM and 1,000-iteration host checks remain part of the deployment pre-flight.
+
+## 2026-08-26 — score recovery checkpoint
+
+- Explorer evidence for epoch 284 is captured in [`GROUND_TRUTH.md`](GROUND_TRUTH.md).
+- Registration `#224` is active with zero fetch attempts/retries; the pre-fix ranks were WEATHER_CHECK `#6/9` and WEATHER_FORECAST `#9/11`.
+- The validator used `location` and `city` query aliases that the old handler rejected. The compatibility release now normalizes those aliases, maps forecast time bounds, requests UTC and m/s units, and emits the compact candidate format.
+- The compatibility release is tested locally but still needs to be deployed and observed in a new epoch before its score impact can be claimed.

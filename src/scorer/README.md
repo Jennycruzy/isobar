@@ -1,4 +1,7 @@
-# assay
+# Isobar Scorer
+
+The Rust crate and generated WASM artifact retain the internal `assay` package
+name for ABI/build compatibility; this scorer lives in `isobar/src/scorer/`.
 
 Deterministic Telegraph answer-scoring module for `wasm32-unknown-unknown`.
 This repository starts from an empty project and contains the first working
