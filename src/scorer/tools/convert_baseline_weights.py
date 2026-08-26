@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Convert Telegraph's published MLM2 payload to assay's fixed record format."""
+"""Convert Telegraph's published MLM2 payload to Isobar's fixed record format."""
 
 from __future__ import annotations
 

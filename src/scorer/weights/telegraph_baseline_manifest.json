@@ -1,5 +1,5 @@
 {
-  "format": "assay-minilm-baseline-compatible-v1",
+  "format": "isobar-scorer-minilm-baseline-compatible-v1",
   "source_repository": "https://github.com/telegraphprotocol/telegraph-wasm-baseline",
   "source_commit": "dfa0cf7fda72789267811ba2190f61a8eaacedf6",
   "source_file": "weights/minilm_l6_v2_q8.bin",

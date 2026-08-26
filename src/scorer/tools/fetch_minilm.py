@@ -34,7 +34,7 @@ def main() -> int:
     for filename in FILES:
         destination = args.output_dir / filename
         destination.parent.mkdir(parents=True, exist_ok=True)
-        request = Request(base + args.revision + "/" + filename, headers={"User-Agent": "assay-model-fetch/0.1"})
+        request = Request(base + args.revision + "/" + filename, headers={"User-Agent": "isobar-scorer-model-fetch/0.1"})
         payload = urlopen(request, timeout=120).read()
         destination.write_bytes(payload)
         manifest["files"][filename] = {

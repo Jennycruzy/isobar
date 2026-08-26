@@ -4,7 +4,7 @@ The active `real_weights` build uses the baseline-compatible artifact, not the
 original Safetensors-derived artifact:
 
 - `minilm_l6_v2_baseline.int8.bin` — Telegraph's published quantized
-  MiniLM-L6-v2 payload converted to the fixed-array `ASAYWT1` format.
+  MiniLM-L6-v2 payload converted to Isobar's fixed-array v1 format.
 - `telegraph_baseline_manifest.json` — source commit, source hash, artifact
   hash, and conversion details.
 

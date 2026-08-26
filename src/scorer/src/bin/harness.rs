@@ -1,7 +1,7 @@
 //! Native evaluation harness for the deterministic scorer.
 
-use assay::embed::{self, Embedding};
-use assay::scorer::{self, ScoringParams};
+use isobar_scorer::embed::{self, Embedding};
+use isobar_scorer::scorer::{self, ScoringParams};
 use std::cmp::Ordering;
 use std::env;
 use std::fmt::Write as _;
@@ -294,7 +294,7 @@ fn score(params: ScoringParams, question: &str, truth: &str, answer: &str) -> f3
 }
 
 fn public_from_raw(raw: f32, params: ScoringParams) -> f32 {
-    assay::math::quantize6(assay::math::contrast_norm(
+    isobar_scorer::math::quantize6(isobar_scorer::math::contrast_norm(
         raw,
         params.steepness,
         params.centre,
@@ -357,7 +357,7 @@ fn build_raw_corpus(
 }
 
 fn write_raw_cache(path: &str, corpus: &RawCorpus) -> Result<(), String> {
-    let mut contents = String::from("# assay-raw-v3\n");
+    let mut contents = String::from("# isobar-scorer-raw-v3\n");
     for fixture in &corpus.fixtures {
         writeln!(
             &mut contents,
@@ -389,9 +389,9 @@ fn read_raw_cache(
     traffic_count: usize,
 ) -> Result<RawCorpus, String> {
     let contents = fs::read_to_string(path).map_err(|error| format!("read raw cache: {error}"))?;
-    if !contents.lines().any(|line| line == "# assay-raw-v3") {
+    if !contents.lines().any(|line| line == "# isobar-scorer-raw-v3") {
         return Err(
-            "raw cache is not an independent baseline cache (expected assay-raw-v3)".to_owned(),
+            "raw cache is not an independent baseline cache (expected isobar-scorer-raw-v3)".to_owned(),
         );
     }
     let mut fixtures = Vec::new();
@@ -591,7 +591,7 @@ fn measure_latency(params: ScoringParams, fixtures: &[Fixture], sample_count: us
     }
 }
 
-fn same_breakdown(left: &assay::Breakdown, right: &assay::Breakdown) -> bool {
+fn same_breakdown(left: &isobar_scorer::Breakdown, right: &isobar_scorer::Breakdown) -> bool {
     left.relevance.to_bits() == right.relevance.to_bits()
         && left.correctness.to_bits() == right.correctness.to_bits()
         && left.lexical.to_bits() == right.lexical.to_bits()
@@ -743,7 +743,7 @@ fn print_report(metrics: &Metrics, champion_margin: f64, champion_ordering: usiz
 }
 
 fn usage() {
-    eprintln!("usage: assay-harness [--fixtures PATH] [--baseline-fixtures PATH] [--traffic PATH] [--champion-scores PATH] [--raw-cache PATH] [--k VALUE] [--c VALUE] [--champion-margin VALUE] [--champion-ordering VALUE] [--determinism-iterations N] [--latency-samples N] [--sweep] [--sweep-k-max VALUE] [--sweep-centre-max VALUE]");
+    eprintln!("usage: isobar-scorer-harness [--fixtures PATH] [--baseline-fixtures PATH] [--traffic PATH] [--champion-scores PATH] [--raw-cache PATH] [--k VALUE] [--c VALUE] [--champion-margin VALUE] [--champion-ordering VALUE] [--determinism-iterations N] [--latency-samples N] [--sweep] [--sweep-k-max VALUE] [--sweep-centre-max VALUE]");
 }
 
 fn main() {

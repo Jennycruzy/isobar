@@ -1,10 +1,10 @@
 //! Score one captured question/reference/answer triple with the local replica.
 
-use assay::scorer::{self, ScoringParams};
+use isobar_scorer::scorer::{self, ScoringParams};
 use std::env;
 
 fn usage() {
-    eprintln!("usage: assay-score-case [--k VALUE] [--c VALUE] QUESTION GROUND_TRUTH ANSWER");
+    eprintln!("usage: isobar-score-case [--k VALUE] [--c VALUE] QUESTION GROUND_TRUTH ANSWER");
 }
 
 fn main() {
@@ -51,7 +51,7 @@ fn main() {
     println!("score           {:.6}", breakdown.score);
     println!(
         "typed_adjustment {:.6}",
-        assay::weather::adjustment(
+        isobar_scorer::weather::adjustment(
             positional[0].as_bytes(),
             positional[1].as_bytes(),
             positional[2].as_bytes(),

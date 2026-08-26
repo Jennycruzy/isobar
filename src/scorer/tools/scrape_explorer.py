@@ -32,7 +32,7 @@ def load_source(source: str) -> str:
     path = Path(source)
     if path.exists():
         return path.read_text(encoding="utf-8", errors="replace")
-    request = Request(source, headers={"User-Agent": "assay-explorer-report/0.1"})
+    request = Request(source, headers={"User-Agent": "isobar-scorer-explorer-report/0.1"})
     with urlopen(request, timeout=20) as response:
         return response.read().decode("utf-8", errors="replace")
 

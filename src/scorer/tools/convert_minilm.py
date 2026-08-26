@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Convert the pinned MiniLM Safetensors model to assay's flat INT8 format.
+"""Convert the pinned MiniLM Safetensors model to Isobar's flat INT8 format.
 
 The converter intentionally uses only Python's standard library and NumPy.
 Safetensors is parsed directly so the generated artifact does not depend on a
@@ -209,7 +209,7 @@ def build_weights(source: Path, output: Path, revision: str) -> dict[str, object
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_bytes(output_bytes)
     return {
-        "format": "assay-minilm-int8-v1",
+        "format": "isobar-scorer-minilm-int8-v1",
         "revision": revision,
         "source_sha256": hashlib.sha256(raw).hexdigest(),
         "weights_sha256": hashlib.sha256(output_bytes).hexdigest(),
@@ -253,7 +253,7 @@ def build_vocab(source: Path, output: Path) -> dict[str, object]:
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_bytes(output_bytes)
     return {
-        "format": "assay-wordpiece-v1",
+        "format": "isobar-scorer-wordpiece-v1",
         "vocab_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
         "artifact_sha256": hashlib.sha256(output_bytes).hexdigest(),
         "artifact_bytes": len(output_bytes),

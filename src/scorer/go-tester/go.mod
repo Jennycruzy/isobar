@@ -1,4 +1,4 @@
-module github.com/Jennycruzy/assay/go-tester
+module github.com/Jennycruzy/isobar/src/scorer/go-tester
 
 go 1.24.0
 

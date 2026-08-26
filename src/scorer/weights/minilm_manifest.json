@@ -2,7 +2,7 @@
   "vocab": {
     "artifact_bytes": 1511730,
     "artifact_sha256": "7b34935d34901cd8d8465b1d5f691382a05d34e22514af9f1ddce36f846ded82",
-    "format": "assay-wordpiece-v1",
+    "format": "isobar-scorer-wordpiece-v1",
     "slots": 65536,
     "vocab_sha256": "07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3",
     "vocab_size": 30522
@@ -13,7 +13,7 @@
       "pooler.dense.weight",
       "pooler.dense.bias"
     ],
-    "format": "assay-minilm-int8-v1",
+    "format": "isobar-scorer-minilm-int8-v1",
     "quantization": "per-output-row symmetric int8; round half away from zero; f32 scales and biases",
     "records": [
       {

@@ -1,5 +1,5 @@
 [package]
-name = "assay"
+name = "isobar-scorer"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.94"
@@ -28,16 +28,16 @@ panic = "abort"
 panic = "abort"
 
 [[bin]]
-name = "assay-harness"
+name = "isobar-scorer-harness"
 path = "src/bin/harness.rs"
 required-features = ["native-harness"]
 
 [[bin]]
-name = "assay-embed-dump"
+name = "isobar-embed-dump"
 path = "src/bin/embed_dump.rs"
 required-features = ["native-harness", "real_weights"]
 
 [[bin]]
-name = "assay-score-case"
+name = "isobar-score-case"
 path = "src/bin/score_case.rs"
 required-features = ["native-harness", "real_weights"]

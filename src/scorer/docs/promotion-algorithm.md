@@ -50,10 +50,10 @@ Generate and select a measured frontier with an explicit tie constraint:
 
 ```bash
 cargo run --release --features 'native-harness real_weights' \
-  --bin assay-harness -- --sweep --sweep-k-max 96 \
-  --raw-cache /tmp/assay-raw.tsv > /tmp/assay-sweep.csv
+  --bin isobar-scorer-harness -- --sweep --sweep-k-max 96 \
+  --raw-cache /tmp/isobar-scorer-raw.tsv > /tmp/isobar-scorer-sweep.csv
 python3 tools/select_frontier.py \
-  --sweep /tmp/assay-sweep.csv --min-agreement 0.95 \
+  --sweep /tmp/isobar-scorer-sweep.csv --min-agreement 0.95 \
   --min-ordering 131 --max-ties 0
 ```
 

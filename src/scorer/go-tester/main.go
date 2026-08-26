@@ -1,4 +1,4 @@
-// Command go-tester round-trips the assay WASM ABI through wazero.
+// Command go-tester round-trips the Isobar Scorer WASM ABI through wazero.
 package main
 
 import (
@@ -29,7 +29,7 @@ type inputBuffer struct {
 }
 
 func main() {
-	wasmPath := flag.String("wasm", "target/wasm32-unknown-unknown/release/assay.wasm", "path to the WASM module")
+	wasmPath := flag.String("wasm", "target/wasm32-unknown-unknown/release/isobar_scorer.wasm", "path to the WASM module")
 	runtimeFlag := flag.String("runtime", "both", "runtime configuration: compiler, interpreter, or both")
 	repeat := flag.Int("repeat", 1000, "number of repeated ABI calls for bit-identity checking")
 	flag.Parse()

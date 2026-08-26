@@ -1,7 +1,7 @@
 # Isobar Scorer
 
-The Rust crate and generated WASM artifact retain the internal `assay` package
-name for ABI/build compatibility; this scorer lives in `isobar/src/scorer/`.
+The Rust crate and generated WASM artifact are the in-repository Isobar Scorer;
+the component lives in `isobar/src/scorer/`.
 
 Deterministic Telegraph answer-scoring module for `wasm32-unknown-unknown`.
 This repository starts from an empty project and contains the first working
@@ -19,7 +19,7 @@ cargo build --release --target wasm32-unknown-unknown --features real_weights
 ```
 
 The module is written to
-`target/wasm32-unknown-unknown/release/assay.wasm`. The normal WASM build does
+`target/wasm32-unknown-unknown/release/isobar_scorer.wasm`. The normal WASM build does
 not compile the native harness, so the module has a single panic implementation
 and can be loaded by a wazero host.
 
@@ -31,7 +31,7 @@ repeat-call bit identity:
 cd go-tester
 go test ./...
 go run . \
-  -wasm ../target/wasm32-unknown-unknown/release/assay.wasm \
+  -wasm ../target/wasm32-unknown-unknown/release/isobar_scorer.wasm \
   -runtime compiler -repeat 1000
 ```
 
@@ -157,7 +157,7 @@ python3 tools/reference_minilm.py \
   --output /tmp/minilm-reference.json \
   "A deterministic sentence for the model."
 cargo run --release --features 'native-harness real_weights' \
-  --bin assay-embed-dump -- \
+  --bin isobar-embed-dump -- \
   "A deterministic sentence for the model."
 ```
 
@@ -180,8 +180,8 @@ Run the real-weights report with the checked-in data:
 
 ```bash
 RUSTUP_TOOLCHAIN=stable cargo run --release --offline \
-  --features 'native-harness real_weights' --bin assay-harness -- \
-  --raw-cache /tmp/assay-raw.tsv
+  --features 'native-harness real_weights' --bin isobar-scorer-harness -- \
+  --raw-cache /tmp/isobar-scorer-raw.tsv
 ```
 
 It prints self-match, average margin, ordering, rank agreement against the
@@ -189,7 +189,7 @@ independent score vector in `data/traffic.baseline.tsv`, ties, p50/p99 latency,
 and the baseline-reference comparison. The process exits non-zero if the
 configured thresholds are not met. That score vector was emitted by the
 unmodified Telegraph baseline at the commit recorded in its manifest; it is
-not `assay`'s own raw output.
+not the Isobar Scorer's own raw output.
 
 The checked-in 144-case corpus is split into 112 fit rows and 32 holdout rows.
 The current `K=16,C=0.4` result is:
@@ -208,7 +208,7 @@ score vector. A current
 Explorer-derived bar can be supplied explicitly:
 
 ```bash
-cargo run --features native-harness --bin assay-harness -- \
+cargo run --features native-harness --bin isobar-scorer-harness -- \
   --champion-margin 0.68037784 --champion-ordering 131 \
   --fixtures data/fixtures.tsv --traffic data/traffic.tsv
 ```
@@ -223,11 +223,11 @@ Sweep the contrast curve and inspect the margin/agreement frontier:
 ```bash
 RUSTUP_TOOLCHAIN=stable cargo run --release \
   --features 'native-harness real_weights' --offline \
-  --bin assay-harness -- --sweep --sweep-k-max 96 \
-  --sweep-centre-max 0.9 --raw-cache /tmp/assay-raw.tsv \
-  > /tmp/assay-sweep.csv
+  --bin isobar-scorer-harness -- --sweep --sweep-k-max 96 \
+  --sweep-centre-max 0.9 --raw-cache /tmp/isobar-scorer-raw.tsv \
+  > /tmp/isobar-scorer-sweep.csv
 python3 tools/select_frontier.py \
-  --sweep /tmp/assay-sweep.csv --min-agreement 0.95 \
+  --sweep /tmp/isobar-scorer-sweep.csv --min-agreement 0.95 \
   --min-ordering 131 --max-ties 0
 ```
 

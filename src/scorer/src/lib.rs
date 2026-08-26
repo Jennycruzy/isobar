@@ -1,4 +1,5 @@
-//! `assay` — deterministic Telegraph answer scoring for `wasm32-unknown-unknown`.
+//! Isobar Scorer — deterministic Telegraph answer scoring for
+//! `wasm32-unknown-unknown`.
 //!
 //! The public ABI accepts pointer/length pairs for UTF-8 byte strings. Scores
 //! are returned as `f32` and quantized to six decimal places at the final
