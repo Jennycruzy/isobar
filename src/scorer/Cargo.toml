@@ -36,3 +36,8 @@ required-features = ["native-harness"]
 name = "assay-embed-dump"
 path = "src/bin/embed_dump.rs"
 required-features = ["native-harness", "real_weights"]
+
+[[bin]]
+name = "assay-score-case"
+path = "src/bin/score_case.rs"
+required-features = ["native-harness", "real_weights"]
