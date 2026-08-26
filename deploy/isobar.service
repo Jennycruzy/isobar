@@ -1,0 +1,23 @@
+[Unit]
+Description=Isobar weather miner
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=isobar
+Group=isobar
+WorkingDirectory=/opt/isobar
+Environment=NODE_ENV=production
+Environment=HOST=127.0.0.1
+Environment=PORT=8080
+ExecStart=/usr/bin/node /opt/isobar/src/server.js
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
