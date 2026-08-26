@@ -9,6 +9,19 @@ const current = {
   current_units: { temperature_2m: '°C', relative_humidity_2m: '%', apparent_temperature: '°C', precipitation: 'mm', wind_speed_10m: 'm/s', wind_direction_10m: '°', surface_pressure: 'hPa', cloud_cover: '%' },
   current: { time: '2026-08-25T14:15', temperature_2m: 34.2, relative_humidity_2m: 41, apparent_temperature: 38.1, precipitation: 0, weather_code: 2, wind_speed_10m: 3.4, wind_direction_10m: 215, surface_pressure: 1004.2, cloud_cover: 40 }
 };
+const currentWithHorizon = {
+  timezone: 'UTC',
+  current_units: current.current_units,
+  current: { ...current.current, time: '2026-08-26T15:30', temperature_2m: 30.9, apparent_temperature: 37, weather_code: 3 },
+  hourly_units: { temperature_2m: '°C', precipitation: 'mm', precipitation_probability: '%', weather_code: 'wmo code' },
+  hourly: {
+    time: ['2026-08-26T16:00', '2026-08-26T17:00', '2026-08-26T18:00'],
+    temperature_2m: [27.1, 31.2, 29.4],
+    precipitation: [0.2, 0.4, 0],
+    precipitation_probability: [30, 66, 0],
+    weather_code: [80, 95, 3]
+  }
+};
 const daily = {
   timezone: 'UTC',
   daily_units: { temperature_2m_max: '°C', temperature_2m_min: '°C', precipitation_sum: 'mm', precipitation_probability_max: '%', wind_speed_10m_max: 'm/s' },
@@ -42,6 +55,23 @@ test('current prose is concise and keeps detail structured', () => {
   assert.ok(!result.answer.includes('°F'));
   assert.ok(!result.answer.includes('\n'));
   assert.ok(result.answer.split(/\s+/).length <= 20);
+});
+test('current answer includes the requested 24-hour facts when available', () => {
+  const result = currentPayload(
+    { name: 'Tokyo', country: 'Japan', timezone: 'Asia/Tokyo' },
+    currentWithHorizon,
+    '2026-08-26T15:31:00.000Z'
+  );
+  assert.equal(result.answer, 'The current temperature in Tokyo, Japan is 30.9C, and it feels like 37.0C. Over the next 24 hours, temperatures range from 27C to 31C, with a chance of scattered showers or thunderstorms, and precipitation chances ranging from 30% to 66%. As of 2026-08-26T15:30Z.');
+  assert.deepEqual(result.next_24h, {
+    low_c: 27.1,
+    high_c: 31.2,
+    condition: 'scattered showers or thunderstorms',
+    probability_min_pct: 30,
+    probability_max_pct: 66
+  });
+  assert.ok(!result.answer.includes('humidity'));
+  assert.ok(!result.answer.includes('pressure'));
 });
 test('forecast matches compact two-day and nearest-hour shape', () => {
   const result = forecastPayload(location, daily, 2, '2026-08-25T19:16:03.000Z');

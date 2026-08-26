@@ -113,6 +113,58 @@ function isoMinute(value, timezone = 'UTC') {
   return date ? `${date.toISOString().slice(0, 16)}Z` : String(value);
 }
 
+function isPrecipitationCode(code) {
+  const value = Number(code);
+  return (value >= 51 && value <= 67) || (value >= 71 && value <= 86) || (value >= 95 && value <= 99);
+}
+
+function horizonCondition(codes) {
+  if (codes.some(isPrecipitationCode)) {
+    return codes.some((code) => Number(code) >= 95)
+      ? 'scattered showers or thunderstorms'
+      : 'rain or showers';
+  }
+  if (codes.some((code) => Number(code) === 45 || Number(code) === 48)) return 'fog';
+  if (codes.some((code) => Number(code) === 3)) return 'overcast';
+  if (codes.some((code) => Number(code) === 2)) return 'partly cloudy';
+  if (codes.some((code) => Number(code) === 1)) return 'mainly clear';
+  if (codes.some((code) => Number(code) === 0)) return 'clear';
+  return undefined;
+}
+
+function next24Summary(body, target) {
+  const h = body.hourly ?? {};
+  const times = h.time ?? [];
+  const timezone = body.timezone ?? 'UTC';
+  const start = utcDate(target, timezone);
+  const end = start ? start.getTime() + 24 * 60 * 60 * 1000 : undefined;
+  const rows = [];
+  for (let i = 0; i < times.length; i++) {
+    const date = utcDate(times[i], timezone);
+    if (!date || (start && (date.getTime() < start.getTime() || date.getTime() > end))) continue;
+    rows.push({
+      temperature: h.temperature_2m?.[i],
+      probability: h.precipitation_probability?.[i],
+      code: h.weather_code?.[i]
+    });
+  }
+  if (!rows.length) return null;
+  const temperatures = rows.map((row) => Number(row.temperature)).filter(Number.isFinite);
+  const codes = rows.map((row) => Number(row.code)).filter(Number.isFinite);
+  const wet = rows.some((row) => isPrecipitationCode(row.code));
+  const probabilities = rows
+    .filter((row) => !wet || isPrecipitationCode(row.code))
+    .map((row) => Number(row.probability))
+    .filter(Number.isFinite);
+  return {
+    low_c: temperatures.length ? Math.min(...temperatures) : undefined,
+    high_c: temperatures.length ? Math.max(...temperatures) : undefined,
+    condition: horizonCondition(codes),
+    probability_min_pct: probabilities.length ? Math.min(...probabilities) : undefined,
+    probability_max_pct: probabilities.length ? Math.max(...probabilities) : undefined
+  };
+}
+
 function datePart(value) {
   const match = String(scalar(value) ?? '').match(/^\d{4}-\d{2}-\d{2}/);
   return match?.[0];
@@ -136,14 +188,33 @@ export function currentPayload(location, body, retrievedAt, stale = false) {
   location = { ...location, timezone: location.timezone === 'auto' || !location.timezone ? body.timezone : location.timezone };
   const c = body.current ?? {};
   const u = body.current_units ?? {};
+  const horizon = next24Summary(body, c.time);
   const parts = [];
   if (present(c.temperature_2m)) parts.push(`${one(c.temperature_2m)}C`);
   if (present(c.precipitation)) parts.push(`${one(c.precipitation)}mm`);
   if (present(c.wind_speed_10m)) parts.push(`${one(windMs(c.wind_speed_10m, unit(u, 'wind_speed_10m')))}m/s`);
   if (present(c.weather_code)) parts.push(conditionSlug(c.weather_code));
-  let answer = `${location.name ?? label(location)} current: ${parts.join(', ')}`;
-  if (c.time) answer += `. As of ${isoMinute(c.time, body.timezone ?? 'UTC')}`;
-  answer += '.';
+  const place = location.name && location.country ? `${location.name}, ${location.country}` : location.name ?? label(location);
+  let answer;
+  if (present(c.temperature_2m) && horizon) {
+    answer = `The current temperature in ${place} is ${one(c.temperature_2m)}C`;
+    if (present(c.apparent_temperature)) answer += `, and it feels like ${one(c.apparent_temperature)}C`;
+    if (horizon) {
+      if (present(horizon.low_c) && present(horizon.high_c)) {
+        answer += `. Over the next 24 hours, temperatures range from ${integer(horizon.low_c)}C to ${integer(horizon.high_c)}C`;
+      }
+      if (horizon.condition) answer += `, with a chance of ${horizon.condition}`;
+      if (present(horizon.probability_min_pct) && present(horizon.probability_max_pct)) {
+        answer += `${horizon.condition ? ', and' : ' with'} precipitation chances ranging from ${integer(horizon.probability_min_pct)}% to ${integer(horizon.probability_max_pct)}%`;
+      }
+    }
+    if (c.time) answer += `. As of ${isoMinute(c.time, body.timezone ?? 'UTC')}`;
+    answer += '.';
+  } else {
+    answer = `${location.name ?? label(location)} current: ${parts.join(', ')}`;
+    if (c.time) answer += `. As of ${isoMinute(c.time, body.timezone ?? 'UTC')}`;
+    answer += '.';
+  }
   if (stale) answer += ' This is the most recent cached observation because the live weather service is temporarily unavailable.';
   return {
     answer,
@@ -165,6 +236,7 @@ export function currentPayload(location, body, retrievedAt, stale = false) {
       condition_slug: present(c.weather_code) ? conditionSlug(c.weather_code) : undefined,
       observed_at: c.time
     },
+    next_24h: horizon ?? undefined,
     source: 'open-meteo', retrieved_at: stale ? `${retrievedAt} (stale)` : retrievedAt
   };
 }
@@ -179,6 +251,7 @@ function forecastRows(body) {
     const row = { time: isoMinute(times[i], timezone) };
     if (present(h.temperature_2m?.[i])) row.temp_c = Number(one(h.temperature_2m[i]));
     if (present(h.precipitation?.[i])) row.precip_mm = Number(one(h.precipitation[i]));
+    if (present(h.precipitation_probability?.[i])) row.precip_probability_pct = Number(integer(h.precipitation_probability[i]));
     if (present(h.wind_speed_10m?.[i])) row.wind_ms = Number(one(windMs(h.wind_speed_10m[i], hu.wind_speed_10m ?? 'm/s')));
     if (present(h.weather_code?.[i])) row.conditions = conditionSlug(h.weather_code[i]);
     rows.push(row);
@@ -267,7 +340,11 @@ export function createWeatherService({ fetchImpl = fetch, logger = console, now 
     const key = `${kind}:${coord}:${kind === 'forecast' ? `${days}:${startDate ?? ''}:${fetchEndDate ?? ''}` : ''}`; const hit = weather.get(key);
     if (hit && now().getTime() - hit.cachedAt < 60_000) return hit.payload;
     const url = new URL(FORECAST_URL); const params = { latitude: location.latitude, longitude: location.longitude, timezone: 'UTC', wind_speed_unit: 'ms' };
-    if (kind === 'current') params.current = 'temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure,cloud_cover';
+    if (kind === 'current') {
+      params.current = 'temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure,cloud_cover';
+      params.hourly = 'temperature_2m,precipitation,precipitation_probability,weather_code';
+      params.forecast_hours = '25';
+    }
     else {
       Object.assign(params, {
         daily: 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max',
