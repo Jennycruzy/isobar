@@ -1,0 +1,33 @@
+# question	ground_truth	good_answer	bad_answer
+What kind of memory is RAM?	RAM is volatile computer memory.	RAM is volatile computer memory.	The answer is permanent disk storage.
+What kind of memory is RAM?	RAM is volatile computer memory.	The correct answer is volatile computer memory.	In short, permanent disk storage.
+What kind of memory is RAM?	RAM is volatile computer memory.	In short, volatile computer memory.	The relevant result is permanent disk storage.
+What kind of memory is RAM?	RAM is volatile computer memory.	The relevant result is volatile computer memory.	This is permanent disk storage.
+What does a CPU execute?	A CPU executes computer instructions.	A CPU executes computer instructions.	The answer is only image files.
+What does a CPU execute?	A CPU executes computer instructions.	The correct answer is computer instructions.	In short, only image files.
+What does a CPU execute?	A CPU executes computer instructions.	In short, computer instructions.	The relevant result is only image files.
+What does a CPU execute?	A CPU executes computer instructions.	The relevant result is computer instructions.	This is only image files.
+What is the Sun?	The Sun is a star.	The Sun is a star.	The answer is a planet.
+What is the Sun?	The Sun is a star.	The correct answer is a star.	In short, a planet.
+What is the Sun?	The Sun is a star.	In short, a star.	The relevant result is a planet.
+What is the Sun?	The Sun is a star.	The relevant result is a star.	This is a planet.
+What is the chemical formula for ozone?	The chemical formula for ozone is O3.	The chemical formula for ozone is O3.	The answer is O2.
+What is the chemical formula for ozone?	The chemical formula for ozone is O3.	The correct answer is O3.	In short, O2.
+What is the chemical formula for ozone?	The chemical formula for ozone is O3.	In short, O3.	The relevant result is O2.
+What is the chemical formula for ozone?	The chemical formula for ozone is O3.	The relevant result is O3.	This is O2.
+What is the SI unit of force?	The SI unit of force is the newton.	The SI unit of force is the newton.	The answer is the watt.
+What is the SI unit of force?	The SI unit of force is the newton.	The correct answer is the newton.	In short, the watt.
+What is the SI unit of force?	The SI unit of force is the newton.	In short, the newton.	The relevant result is the watt.
+What is the SI unit of force?	The SI unit of force is the newton.	The relevant result is the newton.	This is the watt.
+At what temperature does water freeze in Celsius?	Water freezes at 0 degrees Celsius.	Water freezes at 0 degrees Celsius.	The answer is 100 degrees Celsius.
+At what temperature does water freeze in Celsius?	Water freezes at 0 degrees Celsius.	The correct answer is 0 degrees Celsius.	In short, 100 degrees Celsius.
+At what temperature does water freeze in Celsius?	Water freezes at 0 degrees Celsius.	In short, 0 degrees Celsius.	The relevant result is 100 degrees Celsius.
+At what temperature does water freeze in Celsius?	Water freezes at 0 degrees Celsius.	The relevant result is 0 degrees Celsius.	This is 100 degrees Celsius.
+What is the angle sum of a triangle?	The angles in a triangle sum to 180 degrees.	The angles in a triangle sum to 180 degrees.	The answer is 360 degrees.
+What is the angle sum of a triangle?	The angles in a triangle sum to 180 degrees.	The correct answer is 180 degrees.	In short, 360 degrees.
+What is the angle sum of a triangle?	The angles in a triangle sum to 180 degrees.	In short, 180 degrees.	The relevant result is 360 degrees.
+What is the angle sum of a triangle?	The angles in a triangle sum to 180 degrees.	The relevant result is 180 degrees.	This is 360 degrees.
+What does HTML stand for?	HTML stands for Hypertext Markup Language.	HTML stands for Hypertext Markup Language.	The answer is High Transfer Machine Logic.
+What does HTML stand for?	HTML stands for Hypertext Markup Language.	The correct answer is Hypertext Markup Language.	In short, High Transfer Machine Logic.
+What does HTML stand for?	HTML stands for Hypertext Markup Language.	In short, Hypertext Markup Language.	The relevant result is High Transfer Machine Logic.
+What does HTML stand for?	HTML stands for Hypertext Markup Language.	The relevant result is Hypertext Markup Language.	This is High Transfer Machine Logic.

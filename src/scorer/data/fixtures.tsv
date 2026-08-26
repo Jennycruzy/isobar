@@ -1,0 +1,145 @@
+# question	ground_truth	good_answer	bad_answer
+What is the capital of France?	The capital of France is Paris.	The capital of France is Paris.	The answer is Berlin.
+What is the capital of France?	The capital of France is Paris.	The correct answer is Paris.	In short, Berlin.
+What is the capital of France?	The capital of France is Paris.	In short, Paris.	The relevant result is Berlin.
+What is the capital of France?	The capital of France is Paris.	The relevant result is Paris.	This is Berlin.
+What does HTTP stand for?	HTTP stands for Hypertext Transfer Protocol.	HTTP stands for Hypertext Transfer Protocol.	The answer is a database format.
+What does HTTP stand for?	HTTP stands for Hypertext Transfer Protocol.	The correct answer is Hypertext Transfer Protocol.	In short, a database format.
+What does HTTP stand for?	HTTP stands for Hypertext Transfer Protocol.	In short, Hypertext Transfer Protocol.	The relevant result is a database format.
+What does HTTP stand for?	HTTP stands for Hypertext Transfer Protocol.	The relevant result is Hypertext Transfer Protocol.	This is a database format.
+How many days are in a leap year?	A leap year has 366 days.	A leap year has 366 days.	The answer is 365 days.
+How many days are in a leap year?	A leap year has 366 days.	The correct answer is 366 days.	In short, 365 days.
+How many days are in a leap year?	A leap year has 366 days.	In short, 366 days.	The relevant result is 365 days.
+How many days are in a leap year?	A leap year has 366 days.	The relevant result is 366 days.	This is 365 days.
+What is the boiling point of water at sea level?	Water boils at 100 degrees Celsius at sea level.	Water boils at 100 degrees Celsius at sea level.	The answer is zero degrees Celsius.
+What is the boiling point of water at sea level?	Water boils at 100 degrees Celsius at sea level.	The correct answer is 100 degrees Celsius at sea level.	In short, zero degrees Celsius.
+What is the boiling point of water at sea level?	Water boils at 100 degrees Celsius at sea level.	In short, 100 degrees Celsius at sea level.	The relevant result is zero degrees Celsius.
+What is the boiling point of water at sea level?	Water boils at 100 degrees Celsius at sea level.	The relevant result is 100 degrees Celsius at sea level.	This is zero degrees Celsius.
+What is Rust used for?	Rust is a programming language focused on safety and performance.	Rust is a programming language focused on safety and performance.	The answer is a markup language.
+What is Rust used for?	Rust is a programming language focused on safety and performance.	The correct answer is a programming language focused on safety and performance.	In short, a markup language.
+What is Rust used for?	Rust is a programming language focused on safety and performance.	In short, a programming language focused on safety and performance.	The relevant result is a markup language.
+What is Rust used for?	Rust is a programming language focused on safety and performance.	The relevant result is a programming language focused on safety and performance.	This is a markup language.
+What is the largest planet in the Solar System?	Jupiter is the largest planet in the Solar System.	Jupiter is the largest planet in the Solar System.	The answer is Mars.
+What is the largest planet in the Solar System?	Jupiter is the largest planet in the Solar System.	The correct answer is Jupiter.	In short, Mars.
+What is the largest planet in the Solar System?	Jupiter is the largest planet in the Solar System.	In short, Jupiter.	The relevant result is Mars.
+What is the largest planet in the Solar System?	Jupiter is the largest planet in the Solar System.	The relevant result is Jupiter.	This is Mars.
+What does CPU mean?	CPU means central processing unit.	CPU means central processing unit.	The answer is computer power utility.
+What does CPU mean?	CPU means central processing unit.	The correct answer is central processing unit.	In short, computer power utility.
+What does CPU mean?	CPU means central processing unit.	In short, central processing unit.	The relevant result is computer power utility.
+What does CPU mean?	CPU means central processing unit.	The relevant result is central processing unit.	This is computer power utility.
+What is a hash function?	A hash function maps input data to a fixed-size value.	A hash function maps input data to a fixed-size value.	The answer is always encrypts data reversibly.
+What is a hash function?	A hash function maps input data to a fixed-size value.	The correct answer is maps input data to a fixed-size value.	In short, always encrypts data reversibly.
+What is a hash function?	A hash function maps input data to a fixed-size value.	In short, maps input data to a fixed-size value.	The relevant result is always encrypts data reversibly.
+What is a hash function?	A hash function maps input data to a fixed-size value.	The relevant result is maps input data to a fixed-size value.	This is always encrypts data reversibly.
+What is photosynthesis?	Photosynthesis is the process by which plants use light to make chemical energy.	Photosynthesis is the process by which plants use light to make chemical energy.	The answer is the process of freezing water.
+What is photosynthesis?	Photosynthesis is the process by which plants use light to make chemical energy.	The correct answer is the process by which plants use light to make chemical energy.	In short, the process of freezing water.
+What is photosynthesis?	Photosynthesis is the process by which plants use light to make chemical energy.	In short, the process by which plants use light to make chemical energy.	The relevant result is the process of freezing water.
+What is photosynthesis?	Photosynthesis is the process by which plants use light to make chemical energy.	The relevant result is the process by which plants use light to make chemical energy.	This is the process of freezing water.
+What is a primary key?	A primary key uniquely identifies a row in a database table.	A primary key uniquely identifies a row in a database table.	The answer is duplicates a row identifier.
+What is a primary key?	A primary key uniquely identifies a row in a database table.	The correct answer is uniquely identifies a row in a database table.	In short, duplicates a row identifier.
+What is a primary key?	A primary key uniquely identifies a row in a database table.	In short, uniquely identifies a row in a database table.	The relevant result is duplicates a row identifier.
+What is a primary key?	A primary key uniquely identifies a row in a database table.	The relevant result is uniquely identifies a row in a database table.	This is duplicates a row identifier.
+What is an IPv4 address?	An IPv4 address is a 32-bit address written as four octets.	An IPv4 address is a 32-bit address written as four octets.	The answer is a 128-bit address.
+What is an IPv4 address?	An IPv4 address is a 32-bit address written as four octets.	The correct answer is a 32-bit address written as four octets.	In short, a 128-bit address.
+What is an IPv4 address?	An IPv4 address is a 32-bit address written as four octets.	In short, a 32-bit address written as four octets.	The relevant result is a 128-bit address.
+What is an IPv4 address?	An IPv4 address is a 32-bit address written as four octets.	The relevant result is a 32-bit address written as four octets.	This is a 128-bit address.
+What is the purpose of TLS?	TLS helps protect data in transit using encryption and authentication.	TLS helps protect data in transit using encryption and authentication.	The answer is compresses images only.
+What is the purpose of TLS?	TLS helps protect data in transit using encryption and authentication.	The correct answer is protects data in transit using encryption and authentication.	In short, compresses images only.
+What is the purpose of TLS?	TLS helps protect data in transit using encryption and authentication.	In short, protects data in transit using encryption and authentication.	The relevant result is compresses images only.
+What is the purpose of TLS?	TLS helps protect data in transit using encryption and authentication.	The relevant result is protects data in transit using encryption and authentication.	This is compresses images only.
+What is the chemical formula for water?	The chemical formula for water is H2O.	The chemical formula for water is H2O.	The answer is CO2.
+What is the chemical formula for water?	The chemical formula for water is H2O.	The correct answer is H2O.	In short, CO2.
+What is the chemical formula for water?	The chemical formula for water is H2O.	In short, H2O.	The relevant result is CO2.
+What is the chemical formula for water?	The chemical formula for water is H2O.	The relevant result is H2O.	This is CO2.
+Which planet is known as the Red Planet?	Mars is known as the Red Planet.	Mars is known as the Red Planet.	The answer is Venus.
+Which planet is known as the Red Planet?	Mars is known as the Red Planet.	The correct answer is Mars.	In short, Venus.
+Which planet is known as the Red Planet?	Mars is known as the Red Planet.	In short, Mars.	The relevant result is Venus.
+Which planet is known as the Red Planet?	Mars is known as the Red Planet.	The relevant result is Mars.	This is Venus.
+What is the square root of 64?	The square root of 64 is 8.	The square root of 64 is 8.	The answer is 6.
+What is the square root of 64?	The square root of 64 is 8.	The correct answer is 8.	In short, 6.
+What is the square root of 64?	The square root of 64 is 8.	In short, 8.	The relevant result is 6.
+What is the square root of 64?	The square root of 64 is 8.	The relevant result is 8.	This is 6.
+What decimal number is binary 10?	Binary 10 represents decimal 2.	Binary 10 represents decimal 2.	The answer is decimal 10.
+What decimal number is binary 10?	Binary 10 represents decimal 2.	The correct answer is decimal 2.	In short, decimal 10.
+What decimal number is binary 10?	Binary 10 represents decimal 2.	In short, decimal 2.	The relevant result is decimal 10.
+What decimal number is binary 10?	Binary 10 represents decimal 2.	The relevant result is decimal 2.	This is decimal 10.
+Which planet is third from the Sun?	Earth is the third planet from the Sun.	Earth is the third planet from the Sun.	The answer is Jupiter.
+Which planet is third from the Sun?	Earth is the third planet from the Sun.	The correct answer is Earth.	In short, Jupiter.
+Which planet is third from the Sun?	Earth is the third planet from the Sun.	In short, Earth.	The relevant result is Jupiter.
+Which planet is third from the Sun?	Earth is the third planet from the Sun.	The relevant result is Earth.	This is Jupiter.
+What is the approximate speed of light?	The speed of light is approximately 299792 kilometers per second.	The speed of light is approximately 299792 kilometers per second.	The answer is approximately 300 kilometers per second.
+What is the approximate speed of light?	The speed of light is approximately 299792 kilometers per second.	The correct answer is approximately 299792 kilometers per second.	In short, approximately 300 kilometers per second.
+What is the approximate speed of light?	The speed of light is approximately 299792 kilometers per second.	In short, approximately 299792 kilometers per second.	The relevant result is approximately 300 kilometers per second.
+What is the approximate speed of light?	The speed of light is approximately 299792 kilometers per second.	The relevant result is approximately 299792 kilometers per second.	This is approximately 300 kilometers per second.
+What kind of language is Python?	Python is an interpreted programming language.	Python is an interpreted programming language.	The answer is a compiled markup language.
+What kind of language is Python?	Python is an interpreted programming language.	The correct answer is an interpreted programming language.	In short, a compiled markup language.
+What kind of language is Python?	Python is an interpreted programming language.	In short, an interpreted programming language.	The relevant result is a compiled markup language.
+What kind of language is Python?	Python is an interpreted programming language.	The relevant result is an interpreted programming language.	This is a compiled markup language.
+What shape does DNA commonly form?	DNA commonly forms a double helix.	DNA commonly forms a double helix.	The answer is a single flat sheet.
+What shape does DNA commonly form?	DNA commonly forms a double helix.	The correct answer is a double helix.	In short, a single flat sheet.
+What shape does DNA commonly form?	DNA commonly forms a double helix.	In short, a double helix.	The relevant result is a single flat sheet.
+What shape does DNA commonly form?	DNA commonly forms a double helix.	The relevant result is a double helix.	This is a single flat sheet.
+What is carbon's atomic number?	Carbon has atomic number 6.	Carbon has atomic number 6.	The answer is 12.
+What is carbon's atomic number?	Carbon has atomic number 6.	The correct answer is 6.	In short, 12.
+What is carbon's atomic number?	Carbon has atomic number 6.	In short, 6.	The relevant result is 12.
+What is carbon's atomic number?	Carbon has atomic number 6.	The relevant result is 6.	This is 12.
+What is the largest ocean on Earth?	The Pacific Ocean is the largest ocean on Earth.	The Pacific Ocean is the largest ocean on Earth.	The answer is the Arctic Ocean.
+What is the largest ocean on Earth?	The Pacific Ocean is the largest ocean on Earth.	The correct answer is the Pacific Ocean.	In short, the Arctic Ocean.
+What is the largest ocean on Earth?	The Pacific Ocean is the largest ocean on Earth.	In short, the Pacific Ocean.	The relevant result is the Arctic Ocean.
+What is the largest ocean on Earth?	The Pacific Ocean is the largest ocean on Earth.	The relevant result is the Pacific Ocean.	This is the Arctic Ocean.
+How many days are in a week?	There are 7 days in a week.	There are 7 days in a week.	The answer is 10 days.
+How many days are in a week?	There are 7 days in a week.	The correct answer is 7 days.	In short, 10 days.
+How many days are in a week?	There are 7 days in a week.	In short, 7 days.	The relevant result is 10 days.
+How many days are in a week?	There are 7 days in a week.	The relevant result is 7 days.	This is 10 days.
+What is the approximate value of pi?	The approximate value of pi is 3.14159.	The approximate value of pi is 3.14159.	The answer is 2.71828.
+What is the approximate value of pi?	The approximate value of pi is 3.14159.	The correct answer is 3.14159.	In short, 2.71828.
+What is the approximate value of pi?	The approximate value of pi is 3.14159.	In short, 3.14159.	The relevant result is 2.71828.
+What is the approximate value of pi?	The approximate value of pi is 3.14159.	The relevant result is 3.14159.	This is 2.71828.
+What is the default port for HTTP?	The default port for HTTP is 80.	The default port for HTTP is 80.	The answer is 443.
+What is the default port for HTTP?	The default port for HTTP is 80.	The correct answer is 80.	In short, 443.
+What is the default port for HTTP?	The default port for HTTP is 80.	In short, 80.	The relevant result is 443.
+What is the default port for HTTP?	The default port for HTTP is 80.	The relevant result is 80.	This is 443.
+What is the default port for HTTPS?	The default port for HTTPS is 443.	The default port for HTTPS is 443.	The answer is 80.
+What is the default port for HTTPS?	The default port for HTTPS is 443.	The correct answer is 443.	In short, 80.
+What is the default port for HTTPS?	The default port for HTTPS is 443.	In short, 443.	The relevant result is 80.
+What is the default port for HTTPS?	The default port for HTTPS is 443.	The relevant result is 443.	This is 80.
+What is Cargo in the Rust ecosystem?	Cargo is Rust's package manager and build tool.	Cargo is Rust's package manager and build tool.	The answer is a database engine.
+What is Cargo in the Rust ecosystem?	Cargo is Rust's package manager and build tool.	The correct answer is Rust's package manager and build tool.	In short, a database engine.
+What is Cargo in the Rust ecosystem?	Cargo is Rust's package manager and build tool.	In short, Rust's package manager and build tool.	The relevant result is a database engine.
+What is Cargo in the Rust ecosystem?	Cargo is Rust's package manager and build tool.	The relevant result is Rust's package manager and build tool.	This is a database engine.
+What does SQL stand for?	SQL stands for Structured Query Language.	SQL stands for Structured Query Language.	The answer is Simple Queue Logic.
+What does SQL stand for?	SQL stands for Structured Query Language.	The correct answer is Structured Query Language.	In short, Simple Queue Logic.
+What does SQL stand for?	SQL stands for Structured Query Language.	In short, Structured Query Language.	The relevant result is Simple Queue Logic.
+What does SQL stand for?	SQL stands for Structured Query Language.	The relevant result is Structured Query Language.	This is Simple Queue Logic.
+What kind of memory is RAM?	RAM is volatile computer memory.	RAM is volatile computer memory.	The answer is permanent disk storage.
+What kind of memory is RAM?	RAM is volatile computer memory.	The correct answer is volatile computer memory.	In short, permanent disk storage.
+What kind of memory is RAM?	RAM is volatile computer memory.	In short, volatile computer memory.	The relevant result is permanent disk storage.
+What kind of memory is RAM?	RAM is volatile computer memory.	The relevant result is volatile computer memory.	This is permanent disk storage.
+What does a CPU execute?	A CPU executes computer instructions.	A CPU executes computer instructions.	The answer is only image files.
+What does a CPU execute?	A CPU executes computer instructions.	The correct answer is computer instructions.	In short, only image files.
+What does a CPU execute?	A CPU executes computer instructions.	In short, computer instructions.	The relevant result is only image files.
+What does a CPU execute?	A CPU executes computer instructions.	The relevant result is computer instructions.	This is only image files.
+What is the Sun?	The Sun is a star.	The Sun is a star.	The answer is a planet.
+What is the Sun?	The Sun is a star.	The correct answer is a star.	In short, a planet.
+What is the Sun?	The Sun is a star.	In short, a star.	The relevant result is a planet.
+What is the Sun?	The Sun is a star.	The relevant result is a star.	This is a planet.
+What is the chemical formula for ozone?	The chemical formula for ozone is O3.	The chemical formula for ozone is O3.	The answer is O2.
+What is the chemical formula for ozone?	The chemical formula for ozone is O3.	The correct answer is O3.	In short, O2.
+What is the chemical formula for ozone?	The chemical formula for ozone is O3.	In short, O3.	The relevant result is O2.
+What is the chemical formula for ozone?	The chemical formula for ozone is O3.	The relevant result is O3.	This is O2.
+What is the SI unit of force?	The SI unit of force is the newton.	The SI unit of force is the newton.	The answer is the watt.
+What is the SI unit of force?	The SI unit of force is the newton.	The correct answer is the newton.	In short, the watt.
+What is the SI unit of force?	The SI unit of force is the newton.	In short, the newton.	The relevant result is the watt.
+What is the SI unit of force?	The SI unit of force is the newton.	The relevant result is the newton.	This is the watt.
+At what temperature does water freeze in Celsius?	Water freezes at 0 degrees Celsius.	Water freezes at 0 degrees Celsius.	The answer is 100 degrees Celsius.
+At what temperature does water freeze in Celsius?	Water freezes at 0 degrees Celsius.	The correct answer is 0 degrees Celsius.	In short, 100 degrees Celsius.
+At what temperature does water freeze in Celsius?	Water freezes at 0 degrees Celsius.	In short, 0 degrees Celsius.	The relevant result is 100 degrees Celsius.
+At what temperature does water freeze in Celsius?	Water freezes at 0 degrees Celsius.	The relevant result is 0 degrees Celsius.	This is 100 degrees Celsius.
+What is the angle sum of a triangle?	The angles in a triangle sum to 180 degrees.	The angles in a triangle sum to 180 degrees.	The answer is 360 degrees.
+What is the angle sum of a triangle?	The angles in a triangle sum to 180 degrees.	The correct answer is 180 degrees.	In short, 360 degrees.
+What is the angle sum of a triangle?	The angles in a triangle sum to 180 degrees.	In short, 180 degrees.	The relevant result is 360 degrees.
+What is the angle sum of a triangle?	The angles in a triangle sum to 180 degrees.	The relevant result is 180 degrees.	This is 360 degrees.
+What does HTML stand for?	HTML stands for Hypertext Markup Language.	HTML stands for Hypertext Markup Language.	The answer is High Transfer Machine Logic.
+What does HTML stand for?	HTML stands for Hypertext Markup Language.	The correct answer is Hypertext Markup Language.	In short, High Transfer Machine Logic.
+What does HTML stand for?	HTML stands for Hypertext Markup Language.	In short, Hypertext Markup Language.	The relevant result is High Transfer Machine Logic.
+What does HTML stand for?	HTML stands for Hypertext Markup Language.	The relevant result is Hypertext Markup Language.	This is High Transfer Machine Logic.

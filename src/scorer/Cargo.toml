@@ -1,0 +1,38 @@
+[package]
+name = "assay"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.94"
+description = "Deterministic Telegraph scoring module and local evaluation harness"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = []
+# Selects the embedded, converted MiniLM-L6-v2 INT8 runtime.
+real_weights = []
+native-harness = []
+
+[dependencies]
+libm = "0.2.16"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[profile.dev]
+panic = "abort"
+
+[[bin]]
+name = "assay-harness"
+path = "src/bin/harness.rs"
+required-features = ["native-harness"]
+
+[[bin]]
+name = "assay-embed-dump"
+path = "src/bin/embed_dump.rs"
+required-features = ["native-harness", "real_weights"]

@@ -1,0 +1,18 @@
+# id<TAB>question<TAB>ground_truth<TAB>miner_answer
+traffic-001\tWhat is the capital of France?\tThe capital of France is Paris.\tParis is the capital city of France.
+traffic-002\tWhat is the capital of France?\tThe capital of France is Paris.\tThe answer is Paris.
+traffic-003\tWhat is the capital of France?\tThe capital of France is Paris.\tThe capital is Berlin.
+traffic-004\tWhat does HTTP stand for?\tHTTP stands for Hypertext Transfer Protocol.\tHypertext Transfer Protocol.
+traffic-005\tWhat does HTTP stand for?\tHTTP stands for Hypertext Transfer Protocol.\tHTTP is a database format.
+traffic-006\tHow many days are in a leap year?\tA leap year has 366 days.\t366 days.
+traffic-007\tHow many days are in a leap year?\tA leap year has 366 days.\tA leap year has 365 days.
+traffic-008\tWhat is the boiling point of water?\tWater boils at 100 degrees Celsius at sea level.\t100 degrees Celsius at sea level.
+traffic-009\tWhat is the boiling point of water?\tWater boils at 100 degrees Celsius at sea level.\tWater freezes at zero degrees Celsius.
+traffic-010\tWhat is Rust used for?\tRust is a programming language focused on safety and performance.\tRust is a safe, fast programming language.
+traffic-011\tWhat is Rust used for?\tRust is a programming language focused on safety and performance.\tRust is a markup language.
+traffic-012\tWhat is the largest planet?\tJupiter is the largest planet in the Solar System.\tJupiter is the largest planet.
+traffic-013\tWhat is the largest planet?\tJupiter is the largest planet in the Solar System.\tMars is the largest planet.
+traffic-014\tWhat does CPU mean?\tCPU means central processing unit.\tCentral processing unit.
+traffic-015\tWhat does CPU mean?\tCPU means central processing unit.\tCPU means computer power utility.
+traffic-016\tWhat is the purpose of TLS?\tTLS helps protect data in transit using encryption and authentication.\tTLS secures data in transit.
+traffic-017\tWhat is the purpose of TLS?\tTLS helps protect data in transit using encryption and authentication.\tTLS compresses images.
