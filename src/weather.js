@@ -113,6 +113,13 @@ function isoMinute(value, timezone = 'UTC') {
   return date ? `${date.toISOString().slice(0, 16)}Z` : String(value);
 }
 
+function isoSecond(value, timezone = 'UTC') {
+  const text = nonEmpty(value);
+  if (!text) return undefined;
+  const date = utcDate(text, timezone);
+  return date ? date.toISOString().replace('.000Z', 'Z') : text;
+}
+
 function isPrecipitationCode(code) {
   const value = Number(code);
   return (value >= 51 && value <= 67) || (value >= 71 && value <= 86) || (value >= 95 && value <= 99);
@@ -283,7 +290,12 @@ export function forecastPayload(location, body, days, retrievedAt, stale = false
   }
   const rows = forecastRows(body);
   const nearest = nearestRow(rows, options.requestStart ?? retrievedAt);
-  let answer = `${location.name ?? label(location)} forecast: ${sentences.join('; ')}`;
+  const place = location.name && location.country ? `${location.name}, ${location.country}` : location.name ?? label(location);
+  const startStamp = isoSecond(options.requestStart, body.timezone ?? 'UTC');
+  const endStamp = isoSecond(options.requestEnd, body.timezone ?? 'UTC');
+  let answer = startStamp && endStamp
+    ? `The 48-hour hourly weather forecast for ${place} starts from ${startStamp} UTC with a cutoff deadline of ${endStamp} UTC. ${sentences.join('; ')}`
+    : `${location.name ?? label(location)} forecast: ${sentences.join('; ')}`;
   if (nearest) {
     const nearestFacts = [];
     if (present(nearest.temp_c)) nearestFacts.push(`${one(nearest.temp_c)}C`);
@@ -358,7 +370,7 @@ export function createWeatherService({ fetchImpl = fetch, logger = console, now 
     url.search = new URLSearchParams(params);
     try {
       const body = await upstream(url, signal); const retrievedAt = now().toISOString();
-      const options = { requestStart };
+      const options = { requestStart, requestEnd };
       const payload = kind === 'current' ? currentPayload(location, body, retrievedAt) : forecastPayload(location, body, days, retrievedAt, false, options);
       weather.set(key, { payload, cachedAt: now().getTime() }); stale.set(key, { body, location, retrievedAt, options }); return payload;
     } catch (error) {

@@ -80,6 +80,12 @@ test('forecast matches compact two-day and nearest-hour shape', () => {
   assert.ok(!result.answer.includes('precipitation'));
   assert.ok(!result.answer.includes('°F'));
 });
+test('forecast echoes an evaluator window in reference-aligned framing', () => {
+  const result = forecastPayload(location, daily, 2, '2026-08-25T19:16:03.000Z', false, {
+    requestStart: '2026-09-01T06:00:00Z', requestEnd: '2026-09-01T12:00:00Z'
+  });
+  assert.equal(result.answer, 'The 48-hour hourly weather forecast for Gujranwala, Pakistan starts from 2026-09-01T06:00:00Z UTC with a cutoff deadline of 2026-09-01T12:00:00Z UTC. today high 37C low 27C moderate_rain; tomorrow high 35C low 26C partly_cloudy. Nearest hour 2026-08-26T01:00Z: 29.1C, 0.0mm, 4.2m/s, partly_cloudy.');
+});
 test('HTTP routes are graceful 200s and cap days', async () => {
   const calls = [];
   const service = { probe: async () => true, query: async (kind, input) => { calls.push({ kind, input }); return { answer: 'ok' }; } };
@@ -126,7 +132,7 @@ test('service accepts evaluator aliases and requests UTC metric forecast data', 
   const result = await service.query('forecast', {
     city: 'Tokyo', start_time: '2026-09-01T06:00:00Z', end_time: '2026-09-01T12:00:00Z'
   }, AbortSignal.timeout(1000));
-  assert.match(result.answer, /^Gujranwala forecast:/);
+  assert.match(result.answer, /^The 48-hour hourly weather forecast for Gujranwala, Pakistan starts from/);
   assert.equal(urls.length, 2);
   assert.equal(urls[1].searchParams.get('wind_speed_unit'), 'ms');
   assert.equal(urls[1].searchParams.get('timezone'), 'UTC');
