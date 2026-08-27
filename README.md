@@ -11,14 +11,16 @@ on the Lightsail host `54.154.121.30`.
 
 - Telegraph registration: `#224`, `active`
 - Registered intents: `WEATHER_CHECK`, `WEATHER_FORECAST`
-- Current checked epoch: `284`
-- Latest checked ranks: `WEATHER_CHECK #6/9`, `WEATHER_FORECAST #9/11`
+- Baseline epoch: `284` (`WEATHER_CHECK #6/9`, `WEATHER_FORECAST #9/11`)
+- Latest available epoch-285 snapshot: `WEATHER_FORECAST #1/11`, score
+  `0.008892506`; no Isobar `WEATHER_CHECK` row is available yet
 - Minimum price: `0.01 USDC`
 - Health: [`/health`](https://weather.isobars.xyz/health)
 - Explorer: [registration 224](https://explorer.telegraphprotocol.com/miners/224)
 
-The deployment was healthy and scoring when last checked on 2026-08-26. Ranks
-are intent-specific; there is no meaningful cross-intent overall rank.
+The deployment is healthy and the latest available Explorer score snapshot is
+recorded above. Ranks are intent-specific; there is no meaningful cross-intent
+overall rank.
 
 ## Local development
 
@@ -37,7 +39,9 @@ Canonical inputs are `/weather?q=...` and `/forecast?q=...&days=2`; `lat` and
 `lon` may replace `q`. For compatibility with evaluator-generated requests,
 `location` and `city` are accepted as place-name aliases, `latitude` and
 `longitude` are accepted as coordinate aliases, and forecast requests may
-include `start_time` and `end_time` ISO timestamps.
+include `start_time`/`end_time` ISO timestamps or inclusive `start_date`/
+`end_date` bounds. Forecasts default to three days when no `days` or date
+window is supplied and are capped at seven days.
 
 Examples:
 
@@ -54,8 +58,23 @@ example is:
 The current temperature in Tokyo, Japan is 25.0C, and it feels like 31.0C. Over the next 24 hours, temperatures range from 22C to 30C, with a chance of rain or showers, and precipitation chances ranging from 34% to 84%. As of 2026-08-26T21:15Z.
 ```
 
-WEATHER_FORECAST answers contain two compact day summaries and a nearest-hour
-record; the structured `forecast` array carries the hourly values when
-available. The detailed measurements remain in JSON in both routes.
+WEATHER_FORECAST answers contain the requested daily summaries and a
+nearest-hour record; the structured `forecast` array carries the hourly values
+when available. The detailed measurements remain in JSON in both routes.
+
+## Use through Alexandria
+
+Open [Alexandria](https://alexandria.telegraphprotocol.com/), choose **Ask
+Alexandria**, and enter a natural-language weather question. For example:
+
+```text
+Give me a 7-day hourly weather forecast for Tokyo, Japan, including temperature in Celsius, precipitation probability, and wind speed.
+```
+
+Alexandria may send that question as the `q` value to a miner endpoint. Isobar
+extracts the location and forecast shape from that prompt, so a city-only query
+is not required. Alexandria chooses the highest-ranked matching miner; inspect
+the returned provider/receipt to confirm whether the call reached Isobar
+Weather (`isobar-weather`, registration `#224`).
 
 See [deployment](docs/DEPLOYMENT.md) and [registration](telegraph/REGISTRATION.md).

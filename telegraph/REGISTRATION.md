@@ -41,7 +41,9 @@ The registered schema uses `q` or `lat`/`lon`. The runtime also accepts the
 evaluator's observed aliases `location` and `city`, plus `latitude` and
 `longitude`, and accepts forecast `start_time`/`end_time` fields. This keeps
 the registered miner usable when Telegraph generates query parameters from
-natural-language questions.
+natural-language questions. Alexandria may place the full question in `q`; the
+runtime extracts the location, forecast duration, and requested fields from
+that value and supports both `/weather` and `/forecast` routes.
 
 ## Scoring evidence
 

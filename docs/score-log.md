@@ -8,9 +8,13 @@ WEATHER_CHECK and WEATHER_FORECAST.
 | 284 baseline | #6/9, `0.013609781` | #9/11, `0.002964984` | Both validator requests used unsupported `location`/`city` aliases; captured in [`GROUND_TRUTH.md`](GROUND_TRUTH.md). |
 | 2026-08-26 20:43 UTC | pending | pending | `7edb412`: alias normalization, UTC/m/s units, compact two-day forecast; deployed and smoke-tested. |
 | 2026-08-26 21:19 UTC | pending | pending | `9d8e65f`: WEATHER_CHECK adds the requested feels-like and next-24-hour facts when hourly data is available; deployed separately. |
+| 285 current snapshot | no Isobar row | #1, `0.008892506` | Current [Explorer score record](https://explorer.telegraphprotocol.com/api/scores?intent=WEATHER_FORECAST&epoch=285&limit=1). Epoch-285 WEATHER_CHECK has no Isobar row yet. |
+| 2026-08-27 13:54 UTC | pending | pending | Deployed the validated `src/weather.js` date-window/field-contract fix; production smoke test passed. The epoch-285 row above was scored at 00:39 UTC, before deployment. |
 
-The next complete Explorer epoch is the first live measurement of the deployed
-answers. Until then, the only honest result is “pending.”
+Epoch 285 now has a forecast snapshot, but the next complete post-fix Explorer
+epoch is the first measurement of the deployed date-window/field-contract fix.
+The absolute value is not comparable across intents, and `0.019` is not a
+verified guaranteed score.
 
 ## Local format probe
 
@@ -26,3 +30,13 @@ WEATHER_CHECK reference, with `K=16` and `C=0.4`:
 
 These are relative local measurements, not Explorer scores. They justify the
 current format experiment but do not prove rank 1.
+
+## Epoch-285 diagnosis
+
+The captured live question requested a 7-day hourly Tokyo forecast with
+temperature, precipitation probability, and wind speed. The old service
+returned only two daily dates and 48 hourly rows because it ignored the
+`start_date`/`end_date` aliases and omitted hourly precipitation probability
+from its upstream request. The compatibility fix is deployed and verified; the
+next complete Explorer epoch is the first post-deployment measurement. See
+[`HANDOFF.md`](HANDOFF.md).

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildApp } from '../src/server.js';
-import { compass, conditions, conditionSlug, currentPayload, forecastPayload, normalizeInput } from '../src/weather.js';
+import { compass, conditions, conditionSlug, currentPayload, forecastPayload, isForecastRequest, normalizeInput } from '../src/weather.js';
 
 const location = { name: 'Gujranwala', admin1: 'Punjab', country: 'Pakistan', latitude: 32.15567, longitude: 74.18705, timezone: 'Asia/Karachi' };
 const current = {
@@ -44,6 +44,22 @@ test('normalizes protocol location and coordinate aliases', () => {
   assert.equal(normalizeInput({ location: 'Tokyo, Japan' }).q, 'Tokyo, Japan');
   assert.equal(normalizeInput({ city: 'Tokyo', latitude: '35.7', longitude: '139.7' }).q, 'Tokyo');
   assert.equal(normalizeInput({ city: 'Tokyo', latitude: '35.7', longitude: '139.7' }).lat, '35.7');
+  assert.equal(normalizeInput({ city: 'Tokyo', start_date: '2026-09-03', end_date: '2026-09-09' }).start_time, '2026-09-03');
+  assert.equal(normalizeInput({ city: 'Tokyo', start_date: '2026-09-03', end_date: '2026-09-09' }).end_time, '2026-09-09');
+});
+test('normalizes Alexandria natural-language weather prompts', () => {
+  const prompt = 'Give me a 7-day hourly weather forecast for Tokyo, Japan, including temperature in Celsius, precipitation probability, and wind speed.';
+  const result = normalizeInput({ q: prompt });
+  assert.equal(result.q, 'Tokyo, Japan');
+  assert.equal(result.days, 7);
+  assert.equal(result.request_text, prompt);
+  assert.equal(isForecastRequest(prompt), true);
+  assert.match(result.fields, /precipitation probability/);
+});
+test('keeps a next-24-hour current question on the current route', () => {
+  const prompt = "What is the current temperature and 'feels like' temperature in Tokyo, Japan, and what is the forecast for the next 24 hours including any chance of precipitation?";
+  assert.equal(normalizeInput({ q: prompt }).q, 'Tokyo, Japan');
+  assert.equal(isForecastRequest(prompt), false);
 });
 test('current prose is concise and keeps detail structured', () => {
   const result = currentPayload(location, current, '2026-08-25T19:16:03.000Z');
@@ -90,18 +106,27 @@ test('HTTP routes are graceful 200s and cap days', async () => {
   const calls = [];
   const service = { probe: async () => true, query: async (kind, input) => { calls.push({ kind, input }); return { answer: 'ok' }; } };
   const app = buildApp({ logger: false, service });
+  const landing = await app.inject('/');
+  assert.equal(landing.statusCode, 200);
+  assert.match(landing.headers['content-type'], /^text\/html/);
+  assert.match(landing.body, /Isobar Weather/);
+  assert.match(landing.body, /REGISTRATION #224/);
   assert.equal((await app.inject('/health')).statusCode, 200);
   assert.equal((await app.inject('/weather?q=Krak%C3%B3w')).statusCode, 200);
   assert.equal((await app.inject('/weather?location=Tokyo')).statusCode, 200);
+  assert.equal((await app.inject('/weather?q=Give%20me%20a%207-day%20hourly%20weather%20forecast%20for%20Tokyo%2C%20Japan%2C%20including%20temperature%20in%20Celsius.')).statusCode, 200);
   assert.equal((await app.inject('/forecast?city=Tokyo&start_time=2026-09-01T06%3A00%3A00Z&end_time=2026-09-01T12%3A00%3A00Z')).statusCode, 200);
   assert.equal((await app.inject('/weather?lat=32.15&lon=74.18')).statusCode, 200);
   assert.equal((await app.inject('/weather')).statusCode, 200);
   assert.equal((await app.inject('/weather?lat=999&lon=0')).statusCode, 200);
   await app.close();
-  assert.equal(calls.length, 4);
+  assert.equal(calls.length, 5);
   assert.equal(calls[1].input.q, 'Tokyo');
-  assert.equal(calls[2].input.q, 'Tokyo');
-  assert.equal(calls[2].input.start_time, '2026-09-01T06:00:00Z');
+  assert.equal(calls[2].kind, 'forecast');
+  assert.equal(calls[2].input.q, 'Tokyo, Japan');
+  assert.equal(calls[2].input.days, 7);
+  assert.equal(calls[3].input.q, 'Tokyo');
+  assert.equal(calls[3].input.start_time, '2026-09-01T06:00:00Z');
 });
 test('identical cached query is byte-identical', async () => {
   let calls = 0;
@@ -138,5 +163,41 @@ test('service accepts evaluator aliases and requests UTC metric forecast data', 
   assert.equal(urls[1].searchParams.get('timezone'), 'UTC');
   assert.equal(urls[1].searchParams.get('start_date'), '2026-09-01');
   assert.equal(urls[1].searchParams.get('end_date'), '2026-09-02');
-  assert.equal(urls[1].searchParams.get('hourly'), 'temperature_2m,precipitation,weather_code,wind_speed_10m');
+  assert.equal(urls[1].searchParams.get('hourly'), 'temperature_2m,precipitation,precipitation_probability,weather_code,wind_speed_10m');
+});
+
+test('service honors date-window aliases and requested hourly probability fields', async () => {
+  const urls = [];
+  const sevenDay = {
+    timezone: 'UTC',
+    daily_units: { temperature_2m_max: '°C', temperature_2m_min: '°C', precipitation_probability_max: '%', precipitation_sum: 'mm', wind_speed_10m_max: 'm/s' },
+    daily: {
+      time: ['2026-09-03', '2026-09-04', '2026-09-05', '2026-09-06', '2026-09-07', '2026-09-08', '2026-09-09'],
+      weather_code: [1, 2, 3, 61, 63, 2, 0],
+      temperature_2m_max: [30, 31, 29, 28, 27, 30, 31],
+      temperature_2m_min: [23, 24, 22, 21, 20, 22, 23],
+      precipitation_probability_max: [10, 20, 40, 60, 70, 30, 5],
+      precipitation_sum: [0, 0, 1.2, 4.1, 8.4, 0.2, 0],
+      wind_speed_10m_max: [1.2, 1.4, 1.8, 2.1, 2.4, 1.5, 1.1]
+    },
+    hourly_units: { temperature_2m: '°C', precipitation: 'mm', precipitation_probability: '%', weather_code: 'wmo code', wind_speed_10m: 'm/s' },
+    hourly: { time: ['2026-09-03T00:00'], temperature_2m: [25], precipitation: [0], precipitation_probability: [10], weather_code: [1], wind_speed_10m: [1.2] }
+  };
+  const service = (await import('../src/weather.js')).createWeatherService({
+    now: () => new Date('2026-08-27T00:00:00Z'), logger: { info() {} },
+    fetchImpl: async (url) => {
+      urls.push(new URL(url));
+      if (url.toString().includes('geocoding')) return { ok: true, json: async () => ({ results: [location] }) };
+      return { ok: true, json: async () => sevenDay };
+    }
+  });
+  const result = await service.query('forecast', {
+    city: 'Tokyo', start_date: '2026-09-03', end_date: '2026-09-09',
+    fields: 'temperature,precipitation_probability,wind_speed', interval: 'hourly'
+  }, AbortSignal.timeout(1000));
+  assert.match(result.answer, /^The 7-day hourly weather forecast for Gujranwala, Pakistan runs from 2026-09-03 through 2026-09-09 UTC\. Including temperature in Celsius, precipitation probability, and wind speed\./);
+  assert.equal(urls[1].searchParams.get('start_date'), '2026-09-03');
+  assert.equal(urls[1].searchParams.get('end_date'), '2026-09-09');
+  assert.equal(urls[1].searchParams.get('hourly'), 'temperature_2m,precipitation,precipitation_probability,weather_code,wind_speed_10m');
+  assert.equal(result.daily.time.length, 7);
 });
