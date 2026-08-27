@@ -76,3 +76,18 @@
   service reports active with zero restarts.
 - The Explorer row above predates this deployment; do not treat it as a
   measurement of the framing experiment until a later row is scored.
+
+## 2026-08-27 — hourly leader-shape experiment
+
+- The current WEATHER_FORECAST leader publishes dated daily summaries followed
+  by all hourly rows. Isobar now uses that shape only when the request is
+  explicitly hourly; ordinary forecasts retain the compact answer.
+- The rendered daily format is `date: condition, low-high C, precipitation up
+  to %, wind up to km/h`; hourly rows include condition, temperature, dew
+  point, precipitation probability/amount, and km/h wind. Structured JSON still
+  retains metric `wind_ms` and all requested fields.
+- `npm run check` passes 15/15. The live exact epoch question returns HTTP 200,
+  7 daily rows, 168 hourly rows, and dew-point data; `/health` is green.
+- This is a single forecast-format variable. Epoch 286 still reports the
+  pre-deployment Isobar forecast row at `#2/11`; wait for the next Explorer
+  measurement before accepting or reverting it.

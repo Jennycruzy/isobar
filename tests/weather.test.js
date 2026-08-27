@@ -25,8 +25,8 @@ const currentWithHorizon = {
 const daily = {
   timezone: 'UTC',
   daily_units: { temperature_2m_max: '°C', temperature_2m_min: '°C', precipitation_sum: 'mm', precipitation_probability_max: '%', wind_speed_10m_max: 'm/s' },
-  hourly_units: { temperature_2m: '°C', precipitation: 'mm', wind_speed_10m: 'm/s' },
-  hourly: { time: ['2026-08-26T00:00', '2026-08-26T01:00'], temperature_2m: [28.5, 29.1], precipitation: [2.4, 0], weather_code: [63, 2], wind_speed_10m: [5.1, 4.2] },
+  hourly_units: { temperature_2m: '°C', dew_point_2m: '°C', precipitation: 'mm', precipitation_probability: '%', wind_speed_10m: 'm/s' },
+  hourly: { time: ['2026-08-26T00:00', '2026-08-26T01:00'], temperature_2m: [28.5, 29.1], dew_point_2m: [22.1, 22.3], precipitation: [2.4, 0], precipitation_probability: [0, 10], weather_code: [63, 2], wind_speed_10m: [5.1, 4.2] },
   daily: { time: ['2026-08-26', '2026-08-27'], weather_code: [63, 2], temperature_2m_max: [36.8, 35.1], temperature_2m_min: [27.1, 26.4], precipitation_sum: [2.4, 0], precipitation_probability_max: [65, 10], wind_speed_10m_max: [18.2, 12] }
 };
 
@@ -111,6 +111,12 @@ test('forecast echoes relative natural-language window and only requested fields
   assert.match(result.answer, /precipitation probability 65%/);
   assert.ok(!result.answer.includes('wind speed'));
 });
+test('hourly forecast rendering follows the live leader shape', () => {
+  const result = forecastPayload(location, daily, 2, '2026-08-25T19:16:03.000Z', false, { renderHourly: true });
+  assert.match(result.answer, /^2026-08-26: Rain, 27.1-36.8 C, precipitation up to 65%, wind up to 65.5 km\/h; 2026-08-27: Partly cloudy, 26.4-35.1 C, precipitation up to 10%, wind up to 43.2 km\/h Hourly:/);
+  assert.match(result.answer, /2026-08-26T00:00 Rain, temp 28.5 C, dew point 22.1 C, precipitation 0%\/2.4 mm, wind 18.4 km\/h/);
+  assert.ok(!result.answer.includes('Nearest hour'));
+});
 test('HTTP routes are graceful 200s and cap days', async () => {
   const calls = [];
   const service = { probe: async () => true, query: async (kind, input) => { calls.push({ kind, input }); return { answer: 'ok' }; } };
@@ -172,7 +178,7 @@ test('service accepts evaluator aliases and requests UTC metric forecast data', 
   assert.equal(urls[1].searchParams.get('timezone'), 'UTC');
   assert.equal(urls[1].searchParams.get('start_date'), '2026-09-01');
   assert.equal(urls[1].searchParams.get('end_date'), '2026-09-02');
-  assert.equal(urls[1].searchParams.get('hourly'), 'temperature_2m,precipitation,precipitation_probability,weather_code,wind_speed_10m');
+  assert.equal(urls[1].searchParams.get('hourly'), 'temperature_2m,dew_point_2m,precipitation,precipitation_probability,weather_code,wind_speed_10m');
 });
 
 test('service honors date-window aliases and requested hourly probability fields', async () => {
@@ -189,8 +195,8 @@ test('service honors date-window aliases and requested hourly probability fields
       precipitation_sum: [0, 0, 1.2, 4.1, 8.4, 0.2, 0],
       wind_speed_10m_max: [1.2, 1.4, 1.8, 2.1, 2.4, 1.5, 1.1]
     },
-    hourly_units: { temperature_2m: '°C', precipitation: 'mm', precipitation_probability: '%', weather_code: 'wmo code', wind_speed_10m: 'm/s' },
-    hourly: { time: ['2026-09-03T00:00'], temperature_2m: [25], precipitation: [0], precipitation_probability: [10], weather_code: [1], wind_speed_10m: [1.2] }
+    hourly_units: { temperature_2m: '°C', dew_point_2m: '°C', precipitation: 'mm', precipitation_probability: '%', weather_code: 'wmo code', wind_speed_10m: 'm/s' },
+    hourly: { time: ['2026-09-03T00:00'], temperature_2m: [25], dew_point_2m: [20], precipitation: [0], precipitation_probability: [10], weather_code: [1], wind_speed_10m: [1.2] }
   };
   const service = (await import('../src/weather.js')).createWeatherService({
     now: () => new Date('2026-08-27T00:00:00Z'), logger: { info() {} },
@@ -204,9 +210,9 @@ test('service honors date-window aliases and requested hourly probability fields
     city: 'Tokyo', start_date: '2026-09-03', end_date: '2026-09-09',
     fields: 'temperature,precipitation_probability,wind_speed', interval: 'hourly'
   }, AbortSignal.timeout(1000));
-  assert.match(result.answer, /^The 7-day hourly weather forecast for Gujranwala, Pakistan runs from 2026-09-03 through 2026-09-09 UTC\. Including temperature in Celsius, precipitation probability, and wind speed\./);
+  assert.match(result.answer, /^2026-09-03: Mainly clear, 23-30 C, precipitation up to 10%, wind up to 4.3 km\/h; 2026-09-04: Partly cloudy/);
   assert.equal(urls[1].searchParams.get('start_date'), '2026-09-03');
   assert.equal(urls[1].searchParams.get('end_date'), '2026-09-09');
-  assert.equal(urls[1].searchParams.get('hourly'), 'temperature_2m,precipitation,precipitation_probability,weather_code,wind_speed_10m');
+  assert.equal(urls[1].searchParams.get('hourly'), 'temperature_2m,dew_point_2m,precipitation,precipitation_probability,weather_code,wind_speed_10m');
   assert.equal(result.daily.time.length, 7);
 });

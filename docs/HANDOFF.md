@@ -107,8 +107,12 @@ Last checked: 2026-08-27 14:31 UTC.
 - `npm run check` passes 14/14. Production smoke test: HTTP 200, Tokyo/Japan,
   7 daily rows, 168 hourly rows; `/health` is HTTP 200 with `upstream_ok:true`.
   The current deployed `weather.js` SHA-256 is
-  `c4f7ad789e62f6d873315feaa114b4624866d0fe3e4984a67462466c19e7ef4d` on both
+  `a83208b5c7f3edec555ef9ca8ad39720a1ef86b484315a67684ecf81973978f8` on both
   local and remote hosts; the service is active with zero restarts.
+- The hourly leader-shape experiment is now live: explicit hourly forecasts
+  render dated daily summaries and full hourly rows with dew point and km/h
+  wind, matching the current WEATHER_FORECAST leader's structure. Compact
+  rendering remains for ordinary forecast calls.
 
 ## Next work
 
