@@ -2,12 +2,14 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/binary"
 	"flag"
 	"fmt"
 	"math"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/tetratelabs/wazero"
@@ -32,6 +34,7 @@ func main() {
 	wasmPath := flag.String("wasm", "target/wasm32-unknown-unknown/release/isobar_scorer.wasm", "path to the WASM module")
 	runtimeFlag := flag.String("runtime", "both", "runtime configuration: compiler, interpreter, or both")
 	repeat := flag.Int("repeat", 1000, "number of repeated ABI calls for bit-identity checking")
+	corpusPath := flag.String("corpus", "", "optional TSV corpus: id, question, ground truth, answer")
 	flag.Parse()
 
 	if *repeat < 1 {
@@ -47,10 +50,92 @@ func main() {
 		fail("%v", err)
 	}
 	for _, mode := range modes {
+		if *corpusPath != "" {
+			if err := runCorpus(mode, wasm, *corpusPath); err != nil {
+				fail("%s runtime: %v", mode, err)
+			}
+			continue
+		}
 		if err := run(mode, wasm, *repeat); err != nil {
 			fail("%s runtime: %v", mode, err)
 		}
 	}
+}
+
+func runCorpus(mode runtimeMode, wasm []byte, corpusPath string) error {
+	ctx := context.Background()
+	config := wazero.NewRuntimeConfig()
+	if mode == interpreter {
+		config = wazero.NewRuntimeConfigInterpreter()
+	}
+	runtime := wazero.NewRuntimeWithConfig(ctx, config)
+	defer runtime.Close(ctx)
+
+	started := time.Now()
+	module, err := runtime.Instantiate(ctx, wasm)
+	if err != nil {
+		return fmt.Errorf("instantiate: %w", err)
+	}
+	loadDuration := time.Since(started)
+	alloc := module.ExportedFunction("alloc")
+	dealloc := module.ExportedFunction("dealloc")
+	rank := module.ExportedFunction("rank_answer")
+	if alloc == nil || dealloc == nil || rank == nil {
+		return fmt.Errorf("module must export alloc, dealloc, and rank_answer")
+	}
+	memory := module.Memory()
+	if memory == nil {
+		return fmt.Errorf("module did not export linear memory")
+	}
+
+	file, err := os.Open(corpusPath)
+	if err != nil {
+		return fmt.Errorf("open corpus: %w", err)
+	}
+	defer file.Close()
+	scanner := bufio.NewScanner(file)
+	scanner.Buffer(make([]byte, 4096), 1<<20)
+	count := 0
+	for scanner.Scan() {
+		line := strings.TrimSuffix(scanner.Text(), "\r")
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		fields := splitCorpusLine(line)
+		if len(fields) != 4 {
+			return fmt.Errorf("corpus line %d has %d fields, want 4", count+1, len(fields))
+		}
+		buffers, err := allocateInputs(ctx, memory, alloc, []byte(fields[1]), []byte(fields[2]), []byte(fields[3]))
+		if err != nil {
+			return fmt.Errorf("corpus row %q: %w", fields[0], err)
+		}
+		score, err := callF32(ctx, rank, callArgs(buffers)...)
+		releaseInputs(ctx, dealloc, buffers)
+		if err != nil {
+			return fmt.Errorf("corpus row %q: %w", fields[0], err)
+		}
+		if math.IsNaN(float64(score)) || math.IsInf(float64(score), 0) || score < 0.0 || score > 1.0 {
+			return fmt.Errorf("corpus row %q returned invalid score %.9f", fields[0], score)
+		}
+		fmt.Printf("%s\t%.9f\n", fields[0], score)
+		count++
+	}
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("read corpus: %w", err)
+	}
+	if count == 0 {
+		return fmt.Errorf("corpus is empty")
+	}
+	fmt.Fprintf(os.Stderr, "runtime=%s load=%s rows=%d [pass]\n", mode, loadDuration.Round(time.Millisecond), count)
+	return nil
+}
+
+func splitCorpusLine(line string) []string {
+	fields := strings.Split(line, "\t")
+	if len(fields) == 1 {
+		fields = strings.Split(line, `\t`)
+	}
+	return fields
 }
 
 func parseModes(value string) ([]runtimeMode, error) {

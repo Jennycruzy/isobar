@@ -4,9 +4,10 @@ The Rust crate and generated WASM artifact are the in-repository Isobar Scorer;
 the component lives in `isobar/src/scorer/`.
 
 Deterministic Telegraph answer-scoring module for `wasm32-unknown-unknown`.
-This repository starts from an empty project and contains the first working
-module, a native measurement harness, checked-in fixtures, and an Explorer
-report scraper.
+The submitted WEATHER_CHECK path uses a bounded salience-weighted lexical core,
+typed weather facts, and a calibrated threshold contrast. The repository also
+contains the native measurement harness, checked-in fixtures, and Explorer
+capture tooling.
 
 ## Build
 
@@ -67,7 +68,7 @@ breakdown_answer(same arguments) -> *mut Breakdown
 4  correctness     // cosine(ground_truth, miner_answer)
 8  lexical         // normalized BM25(ground_truth, miner_answer)
 12 length_quality
-16 raw_score       // published baseline composite, before contrast
+16 raw_score       // salience/fact raw value, before contrast
 20 score           // public, contrast-enhanced score
 ```
 
@@ -78,36 +79,32 @@ last active input allocation is released.
 
 ## Scoring
 
-The raw composite starts with the published Telegraph baseline and is accumulated
-in a fixed order:
+The scored raw value is accumulated in a fixed order from:
 
 ```text
-0.25 cosine(question, miner_answer)
-0.50 cosine(ground_truth, miner_answer)
-0.15 normalized BM25(ground_truth, miner_answer)
-0.10 sigmoid((miner_answer.len() - 50) / 20)
+weighted content precision/recall
+character n-gram overlap
+content-word adjacency
+typed numeric, polarity, and location checks
 ```
 
-For weather-shaped questions, the baseline value is then passed through the
-bounded `weather::adjustment` layer before the contrast curve. The detector is
-allocation-free and only pairs facts when their context keys match (with the
-specified equal-count positional fallback); unmatched reference facts add no
-penalty. It checks Celsius/Fahrenheit consistency, temperature, percentages,
-wind speed and bearing, precipitation, condition polarity, and an explicit
-city token from the question. Non-weather text takes the exact baseline path.
+For weather-shaped questions, the value also passes through the bounded
+`weather::adjustment` layer before contrast. The detector is allocation-free and
+only pairs facts when their context keys match (with the specified equal-count
+positional fallback); unmatched reference facts add no penalty. It checks
+Celsius/Fahrenheit consistency, temperature, percentages, wind speed and
+bearing, precipitation, condition polarity, and an explicit city token from the
+question. Non-weather text skips that adjustment.
 
-The public score applies an endpoint-pinned logistic transform, then clamps and
-rounds to six decimal places. The current measured defaults are `K = 16.0`
-and `C = 0.4`: on the expanded local corpus they retain zero quantized ties,
-rank agreement `1.000000` with the independent baseline vector, and increase
-the baseline-reference margin from `0.278296` to `0.538656`. These are local
-measurements, not live-network guarantees. `libm::expf` is used explicitly.
-The projection encoder, INT8 runtime, and all lexical structures use fixed
-arrays; there is no `HashMap`, time, randomness, I/O, or ambient state in the
-module.
+The public score uses the evidence-backed threshold calibration: a `.95` centre,
+`.04` half-width ramp, and `.04` raw tie-break. The ramp supplies separation;
+the raw tail retains rank information. Output is clamped and quantized to six
+decimal places. The submitted `rank_answer` path does not run MiniLM, keeping
+per-call work bounded; the optional real-weight encoder remains available for
+diagnostics and parity tests. All scorer state is fixed-array and deterministic:
+no `HashMap`, time, randomness, I/O, or ambient state.
 
-The default encoder is a deterministic hashed projection intended for pipeline
-development. The `real_weights` feature embeds
+The `real_weights` feature embeds
 `weights/minilm_l6_v2_baseline.int8.bin`, a converted copy of Telegraph's
 published quantized MiniLM-L6-v2 payload, uses the tracked WordPiece
 vocabulary, and runs six transformer layers followed by masked mean pooling and
@@ -167,12 +164,10 @@ The current four-sentence check gives cosine similarity between `0.9989` and
 encoder for the reference and candidate answer, so this must be benchmarked on
 the target validator runtime before submission.
 
-The latest native release measurement over 10 full scorer calls was p50
-`1.310092606` seconds and p99 `2.041652218` seconds. This is end-to-end
-real-weight latency, including transformer inference; the contrast layer is
-only the final scalar transform. A VPS is useful for leaving the long
-1,000-iteration determinism and host-runtime checks running, but is not needed
-to build the module.
+The submitted lexical path measures below a millisecond per ordinary captured
+answer in release mode; long answers remain bounded by the fixed token and gram
+caps. A VPS is useful for leaving the 1,000-iteration determinism and host-runtime
+checks running, but is not needed to build the module.
 
 ## Harness
 
@@ -184,15 +179,18 @@ RUSTUP_TOOLCHAIN=stable cargo run --release --offline \
   --raw-cache /tmp/isobar-scorer-raw.tsv
 ```
 
-It prints self-match, average margin, ordering, rank agreement against the
-independent score vector in `data/traffic.baseline.tsv`, ties, p50/p99 latency,
-and the baseline-reference comparison. The process exits non-zero if the
-configured thresholds are not met. That score vector was emitted by the
-unmodified Telegraph baseline at the commit recorded in its manifest; it is
-not the Isobar Scorer's own raw output.
+It prints self-match, average margin, ordering, rank agreement, ties, p50/p99
+latency, and the champion-margin comparison. The process exits non-zero if the
+configured thresholds are not met. The default score vector is the checked-in
+unmodified Telegraph baseline; a live Explorer vector should be supplied for a
+registration decision.
 
-The checked-in 144-case corpus is split into 112 fit rows and 32 holdout rows.
-The current `K=16,C=0.4` result is:
+The checked-in 144-case generic corpus is split into 112 fit rows and 32
+holdout rows. Its historical logistic result remains useful for regression
+checks, but the WEATHER_CHECK registration decision uses captured weather
+traffic instead. The default threshold path is intentionally tuned for the
+weather intent and is not expected to rank generic fixtures like a generic
+baseline scorer.
 
 ```text
 full:    margin 0.538656, ordering 131/144, agreement 1.000000, ties 0
@@ -231,8 +229,36 @@ python3 tools/select_frontier.py \
   --min-ordering 131 --max-ties 0
 ```
 
-The sweep caches raw scores, so the transformer runs once per corpus item and
-each grid point measures only the contrast curve and rank statistics.
+The sweep caches raw scores, so the scorer runs once per corpus item and each
+grid point measures only the contrast curve and rank statistics.
+
+Use `--corpus PATH` with an Explorer-derived four-column TSV to turn each
+captured row into a ground-truth-vs-miner fixture. The WEATHER_CHECK rows are
+selected automatically when IDs use the `weather-check-` prefix; a prefiltered
+capture may use arbitrary IDs. The companion `extract_weather_corpus.py` tool
+converts `docs/signals.json` into this format:
+
+```bash
+python3 tools/extract_weather_corpus.py docs/signals.json \
+  --corpus /tmp/weather-check.tsv \
+  --scores /tmp/weather-check-scores.tsv
+```
+
+The final 200-row Explorer history calibration used the live score vector and
+reported local margin `0.994756`, ordering `200/200`, and rank agreement
+`0.708337`. The current champion's published gate record is margin
+`0.98340964` and WEATHER_CHECK Spearman agreement `0.6128585`. The synthetic
+fit split measured margin `0.590560` with `117/156` ordering; the 44-row
+holdout measured `0.793219` with `38/44` ordering. The history margin is a
+local proxy because the 200 Explorer rows supply independent live scores but
+not the validator's hidden fixture pairs. These are calibration results, not a
+registration guarantee; the live validator remains authoritative.
+
+The harness reports `9,379` distinct-input ties on the fit run and `8,658` on
+holdout after six-decimal quantization (`879` and `940` repeated-input ties,
+respectively). The empty-answer rows in the public history account for much of
+the traffic tie count. This is recorded as a pre-registration issue rather than
+being represented as a zero-tie pass.
 
 Use `--fixtures data/fixtures-fit.tsv` or
 `--fixtures data/fixtures-holdout.tsv` with a matching raw cache to evaluate

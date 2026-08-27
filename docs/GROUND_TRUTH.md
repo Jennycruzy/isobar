@@ -206,3 +206,30 @@ Explorer result: `verity-weather-forecast` is `#1/11`, `0.0098297`; Isobar is
 row was scored at `2026-08-27T09:38:46.719342Z`, before the later natural-
 language forecast framing deployment. The deployed response is therefore a
 new experiment, not a retroactive explanation of this score.
+
+## Epoch 286 live API capture
+
+The requested `/api/signals?limit=200` route returned HTTP 404. The equivalent
+structured score capture was saved verbatim as [`signals.json`](signals.json)
+from `/api/scores?intent=WEATHER_CHECK&limit=200` on 2026-08-27. It contains
+200 historical WEATHER_CHECK rows, including the current epoch's question,
+ground truth, raw miner payloads, converted answers, scores, ranks, and failure
+reasons. The current epoch-286 WEATHER_CHECK rows were:
+
+| Rank | Miner | Score | Converted answer / result |
+|---:|---|---:|---|
+| 1 | `isobar-weather` | `0.018964943` | The current weather in Tokyo, Japan, is overcast with a temperature of 24.7°C (76.5°F) and a perceived temperature of 29.9°C, with a 59-73% chance of rain or showers over the next 24 hours, ranging from 22.5°C to 29.1°C. |
+| 2 | `verity-current-weather` | `0.015380494` | The weather in Tokyo, Japan, on August 27, 2026, at 9:30 UTC, is overcast with a temperature of 24.7°C (76.5°F) and a feels-like temperature of 29.9°C (85.8°F), with 92% humidity and a light wind of 2.5 km/h. |
+| 3 | `weatherapi` | `0.015171461` | The current weather in Tokyo, Japan, at 18:30 local time on August 27, 2026, is described as light rain shower with 100% cloud cover, and feels like 80.4°F (26.9°C) with a dew point of 65°F (18.4°C). |
+| 4 | `openweathermap` | `0.01499181` | The data shows that Tokyo, Japan, is experiencing heavy intensity rain with a visibility of 10 km and a wind speed of 4.63 m/s, with a temperature of 297.45°C (85.21°F) and humidity of 84%. |
+| 5 | `amanat-weather-risk` | `0.014811547` | The weather forecast for a location near 35.69N, 139.69E over the next 24 hours predicts a temperature of 27.9°C with light winds and no precipitation, with a low storm risk of 0.148. |
+| 6 | `bittensor-sn18-zeus` | `0.014068047` | The data shows temperature readings in Kelvin (K) for every hour from 2026-08-27 06:00:00Z to 2026-09-11 06:00:00Z, with a step of 361 hours. |
+| 7 | `lacre-meteo` | `0` | Empty answer; upstream returned HTTP 530. |
+| 8 | `skywire-weather-check` | `0` | Empty answer; the requested endpoint was not declared. |
+| 9 | `solar-depin-miner` | `0` | Empty answer; upstream timed out. |
+
+For Track 2, the 200-row history returned by the same `/api/scores` endpoint was
+converted with [`extract_weather_corpus.py`](../src/scorer/tools/extract_weather_corpus.py)
+into a reproducible corpus and the Explorer `score` field was used as the
+independent champion vector. This is separate from the 10-row epoch-284 sample
+above and is the evidence behind the scorer's current local calibration.

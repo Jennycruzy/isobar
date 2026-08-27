@@ -13,6 +13,10 @@ crate-type = ["cdylib", "rlib"]
 default = []
 # Selects the embedded, converted MiniLM-L6-v2 INT8 runtime.
 real_weights = []
+# Compatibility switch for the upstream salience module's optional transformer
+# branch. It also enables the embedded runtime; WEATHER_CHECK keeps this path
+# off and uses the bounded lexical/fact implementation.
+minilm = ["real_weights"]
 native-harness = []
 
 [dependencies]

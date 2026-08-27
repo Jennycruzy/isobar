@@ -131,7 +131,7 @@ fn has_word(bytes: &[u8], needle: &[u8]) -> bool {
         let mut equal = true;
         let mut index = 0;
         while index < needle.len() {
-            if lower(bytes[start + index]) != needle[index] {
+            if lower(bytes[start + index]) != lower(needle[index]) {
                 equal = false;
                 break;
             }
@@ -252,11 +252,7 @@ fn token_hash(bytes: &[u8], start: usize, end: usize) -> u32 {
 /// Extract at most two non-stopword tokens before a number and one after it.
 /// The fixed token hashes are the context key used by the pairing pass; they
 /// avoid positional guesses when a response contains several temperatures.
-fn context_key(
-    bytes: &[u8],
-    number_start: usize,
-    number_end: usize,
-) -> ([u32; CONTEXT_SLOTS], u8) {
+fn context_key(bytes: &[u8], number_start: usize, number_end: usize) -> ([u32; CONTEXT_SLOTS], u8) {
     let mut key = [0; CONTEXT_SLOTS];
     let mut len = 0usize;
     let left = number_start.saturating_sub(56);
@@ -342,6 +338,86 @@ fn parse_number(bytes: &[u8], start: usize) -> Option<(usize, f32)> {
         Some((index, value))
     } else {
         None
+    }
+}
+
+#[inline]
+fn decimal(bytes: &[u8], start: usize, count: usize) -> Option<i32> {
+    let end = start.checked_add(count)?;
+    if end > bytes.len() {
+        return None;
+    }
+    let mut value = 0i32;
+    let mut index = start;
+    while index < end {
+        if !is_digit(bytes[index]) {
+            return None;
+        }
+        value = value * 10 + (bytes[index] - b'0') as i32;
+        index += 1;
+    }
+    Some(value)
+}
+
+/// Convert a proleptic Gregorian date to Unix days. The arithmetic is bounded
+/// to the timestamp years used by weather responses and avoids a time API so
+/// the scorer remains deterministic in both host runtimes.
+fn days_from_civil(year: i32, month: i32, day: i32) -> i64 {
+    let adjusted_year = year - if month <= 2 { 1 } else { 0 };
+    let era = if adjusted_year >= 0 {
+        adjusted_year / 400
+    } else {
+        (adjusted_year - 399) / 400
+    };
+    let year_of_era = adjusted_year - era * 400;
+    let month_prime = month + if month > 2 { -3 } else { 9 };
+    let day_of_year = (153 * month_prime + 2) / 5 + day - 1;
+    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    (era * 146_097 + day_of_era - 719_468) as i64
+}
+
+fn timestamp_at(bytes: &[u8], start: usize) -> Option<i64> {
+    if start + 16 > bytes.len()
+        || bytes[start + 4] != b'-'
+        || bytes[start + 7] != b'-'
+        || (bytes[start + 10] != b'T' && bytes[start + 10] != b' ')
+        || bytes[start + 13] != b':'
+    {
+        return None;
+    }
+    let year = decimal(bytes, start, 4)?;
+    let month = decimal(bytes, start + 5, 2)?;
+    let day = decimal(bytes, start + 8, 2)?;
+    let hour = decimal(bytes, start + 11, 2)?;
+    let minute = decimal(bytes, start + 14, 2)?;
+    if !(1..=12).contains(&month)
+        || !(1..=31).contains(&day)
+        || hour > 23
+        || minute > 59
+        || year < 1970
+    {
+        return None;
+    }
+    Some(days_from_civil(year, month, day) * 86_400 + hour as i64 * 3_600 + minute as i64 * 60)
+}
+
+fn first_timestamp(bytes: &[u8]) -> Option<i64> {
+    let mut index = 0;
+    while index + 16 <= bytes.len() {
+        if is_digit(bytes[index]) {
+            if let Some(timestamp) = timestamp_at(bytes, index) {
+                return Some(timestamp);
+            }
+        }
+        index += 1;
+    }
+    None
+}
+
+fn stale_observation(reference: &[u8], candidate: &[u8]) -> bool {
+    match (first_timestamp(reference), first_timestamp(candidate)) {
+        (Some(reference_time), Some(candidate_time)) => reference_time - candidate_time > 3_600,
+        _ => false,
     }
 }
 
@@ -656,6 +732,68 @@ fn condition_polarity(bytes: &[u8]) -> u8 {
     }
 }
 
+fn is_ascii_alpha(byte: u8) -> bool {
+    byte.is_ascii_alphabetic()
+}
+
+fn generic_location_word(bytes: &[u8]) -> bool {
+    has_any_word(
+        bytes,
+        &[
+            b"a",
+            b"an",
+            b"area",
+            b"coordinate",
+            b"coordinates",
+            b"given",
+            b"location",
+            b"specified",
+            b"the",
+        ],
+    )
+}
+
+/// Detect a named alternate place after a natural-language location marker.
+/// Numeric clock phrases such as "at 09:30" and generic phrases such as "at
+/// the specified location" are intentionally ignored.
+fn has_alternate_location(candidate: &[u8], expected: &[u8]) -> bool {
+    let markers = [b"in".as_slice(), b"at".as_slice(), b"for".as_slice()];
+    let mut index = 0;
+    while index < candidate.len() {
+        if !is_word(candidate[index]) {
+            index += 1;
+            continue;
+        }
+        let start = index;
+        while index < candidate.len() && is_word(candidate[index]) {
+            index += 1;
+        }
+        let marker = &candidate[start..index];
+        let mut marker_index = 0;
+        while marker_index < markers.len() {
+            if token_equals(marker, markers[marker_index]) {
+                let mut next = skip_space(candidate, index);
+                while next < candidate.len() && !is_word(candidate[next]) {
+                    next += 1;
+                }
+                if next < candidate.len() && is_ascii_alpha(candidate[next]) {
+                    let word_start = next;
+                    while next < candidate.len() && is_word(candidate[next]) {
+                        next += 1;
+                    }
+                    let word = &candidate[word_start..next];
+                    if !generic_location_word(word) && !token_equals(word, expected) {
+                        return true;
+                    }
+                }
+                break;
+            }
+            marker_index += 1;
+        }
+    }
+    false
+}
+
 fn score_fact(reference: Fact, candidate: Fact) -> f32 {
     let difference = match reference.kind {
         KIND_TEMPERATURE => (reference.temperature_c() - candidate.temperature_c()).abs(),
@@ -803,8 +941,7 @@ fn pair_score(reference: FactBuffer, candidate: FactBuffer) -> f32 {
             while ref_index < reference.len {
                 if reference.values[ref_index].kind == kind && !used_reference[ref_index] {
                     while cand_index < candidate.len
-                        && (used_candidate[cand_index]
-                            || candidate.values[cand_index].kind != kind)
+                        && (used_candidate[cand_index] || candidate.values[cand_index].kind != kind)
                     {
                         cand_index += 1;
                     }
@@ -822,6 +959,74 @@ fn pair_score(reference: FactBuffer, candidate: FactBuffer) -> f32 {
         kind += 1;
     }
     math::finite_or_zero(total)
+}
+
+/// Whether the two answers describe the same set of typed facts. This is the
+/// strict path for adversarial mutations: a candidate that omits a fact is not
+/// treated as if an extractor had proven that omitted fact wrong.
+fn same_fact_shape(reference: FactBuffer, candidate: FactBuffer) -> bool {
+    if reference.len == 0 || reference.len != candidate.len {
+        return false;
+    }
+    let mut used = [false; MAX_FACTS];
+    let mut reference_index = 0;
+    while reference_index < reference.len {
+        let reference_fact = reference.values[reference_index];
+        let mut candidate_index = 0;
+        let mut found = false;
+        while candidate_index < candidate.len {
+            let candidate_fact = candidate.values[candidate_index];
+            if !used[candidate_index]
+                && candidate_fact.key() == reference_fact.key()
+                && context_matches(reference_fact, candidate_fact)
+            {
+                used[candidate_index] = true;
+                found = true;
+                break;
+            }
+            candidate_index += 1;
+        }
+        if !found {
+            return false;
+        }
+        reference_index += 1;
+    }
+    true
+}
+
+/// Add the extra weight for a matched but materially wrong fact. The ordinary
+/// pair score stays soft for differently shaped miner answers; this branch is
+/// reserved for controlled mutations where the context pairing is unambiguous.
+fn strict_fact_penalty(reference: FactBuffer, candidate: FactBuffer) -> f32 {
+    let mut used = [false; MAX_FACTS];
+    let mut penalty = 0.0;
+    let mut reference_index = 0;
+    while reference_index < reference.len {
+        let reference_fact = reference.values[reference_index];
+        let mut candidate_index = 0;
+        while candidate_index < candidate.len {
+            let candidate_fact = candidate.values[candidate_index];
+            if !used[candidate_index]
+                && candidate_fact.key() == reference_fact.key()
+                && context_matches(reference_fact, candidate_fact)
+            {
+                used[candidate_index] = true;
+                if score_fact(reference_fact, candidate_fact) < 0.0 {
+                    penalty -= match reference_fact.kind {
+                        KIND_TEMPERATURE | KIND_WIND_SPEED => 0.05,
+                        KIND_PROBABILITY | KIND_PRECIPITATION => 0.03,
+                        KIND_HUMIDITY | KIND_CLOUD | KIND_PRESSURE => 0.02,
+                        KIND_WIND_DIRECTION => 0.04,
+                        _ => 0.0,
+                    };
+                }
+                break;
+            }
+            candidate_index += 1;
+        }
+        reference_index += 1;
+    }
+    penalty
 }
 
 fn location_penalty(question: &[u8], reference: &[u8], candidate: &[u8]) -> f32 {
@@ -887,7 +1092,14 @@ fn location_penalty(question: &[u8], reference: &[u8], candidate: &[u8]) -> f32 
     }
     let expected = &phrase[word_start..word_end];
     if has_word(reference, expected) && !has_word(candidate, expected) {
-        -0.12
+        // A clearly named alternate city is a hard mismatch. Generic answers
+        // that say only "the specified location" stay on the soft path because
+        // the extractor cannot prove that they refer to another place.
+        if has_alternate_location(candidate, expected) {
+            -0.30
+        } else {
+            -0.12
+        }
     } else {
         0.0
     }
@@ -928,22 +1140,40 @@ pub fn adjustment(question: &[u8], reference: &[u8], candidate: &[u8]) -> f32 {
     }
     let reference_facts = collect_facts(reference);
     let candidate_facts = collect_facts(candidate);
+    let strict = same_fact_shape(reference_facts, candidate_facts);
     let mut adjustment = pair_score(reference_facts, candidate_facts);
-    adjustment += unit_consistency(candidate_facts);
+    if strict {
+        adjustment += strict_fact_penalty(reference_facts, candidate_facts);
+        adjustment += unit_consistency(candidate_facts);
+    } else {
+        adjustment += unit_consistency(candidate_facts);
+    }
     let reference_polarity = condition_polarity(reference);
     let candidate_polarity = condition_polarity(candidate);
     if reference_polarity != 0
         && candidate_polarity != 0
         && reference_polarity != candidate_polarity
     {
-        adjustment -= 0.12;
+        // Live miners often use a broader condition label than the reference,
+        // so only an unambiguous same-shape mutation gets the hard drop.
+        adjustment -= if strict { 0.18 } else { 0.0 };
     }
-    adjustment += location_penalty(question, reference, candidate);
+    if stale_observation(reference, candidate) {
+        // Staleness is a hard correctness failure even when every numeric fact
+        // still matches the reference; the small match bonuses must not erase it.
+        adjustment -= if strict { 0.18 } else { 0.15 };
+    }
+    let location = location_penalty(question, reference, candidate);
+    adjustment += if strict && location < 0.0 {
+        location - 0.18
+    } else {
+        location
+    };
     if !adjustment.is_finite() {
         return 0.0;
     }
-    if adjustment < -0.25 {
-        -0.25
+    if adjustment < -0.40 {
+        -0.40
     } else if adjustment > 0.12 {
         0.12
     } else {
@@ -990,6 +1220,28 @@ mod tests {
         let reference = b"Weather in Lagos: 18.4 km/h wind.";
         let candidate = b"Weather in Lagos: 5.1m/s wind.";
         assert!(adjustment(b"weather in Lagos", reference, candidate) < 0.0);
+    }
+
+    #[test]
+    fn observation_more_than_an_hour_old_is_penalized() {
+        let reference = b"Tokyo current at 2026-08-27T12:00Z: 30C, clear.";
+        let candidate = b"Tokyo current at 2026-08-27T10:30Z: 30C, clear.";
+        assert!(adjustment(b"weather in Tokyo", reference, candidate) <= -0.10);
+    }
+
+    #[test]
+    fn recent_observation_is_not_stale() {
+        let reference = b"Tokyo current at 2026-08-27T12:00Z: 30C, clear.";
+        let candidate = b"Tokyo current at 2026-08-27T11:30Z: 30C, clear.";
+        assert!(adjustment(b"weather in Tokyo", reference, candidate) > -0.10);
+    }
+
+    #[test]
+    fn wrong_city_is_penalized_when_facts_match() {
+        let reference = b"Tokyo current: 30C, 0.0mm, 3.4m/s, partly_cloudy.";
+        let candidate = b"Weather in Osaka: Osaka current: 30C, 0.0mm, 3.4m/s, partly_cloudy.";
+        let value = adjustment(b"weather in Tokyo", reference, candidate);
+        assert!(value < -0.10);
     }
 
     #[test]

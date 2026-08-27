@@ -41,7 +41,11 @@ fn main() {
         positional[0].as_bytes(),
         positional[1].as_bytes(),
         positional[2].as_bytes(),
-        ScoringParams { steepness, centre },
+        ScoringParams {
+            steepness,
+            centre,
+            threshold: false,
+        },
     );
     println!("relevance       {:.6}", breakdown.relevance);
     println!("correctness     {:.6}", breakdown.correctness);

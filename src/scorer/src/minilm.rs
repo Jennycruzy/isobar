@@ -925,3 +925,39 @@ pub fn debug_token_ids(bytes: &[u8]) -> ([u32; MAX_SEQ], usize) {
     let tokens = tokenize(&vocab, bytes);
     (tokens.ids, tokens.len)
 }
+
+// The salience source retains an optional transformer branch used by other
+// intents. The WEATHER_CHECK build leaves that branch disabled, but keeping a
+// small adapter here makes `--all-features` compile and gives that branch a
+// deterministic full-encoder fallback when it is explicitly requested.
+#[cfg(feature = "minilm")]
+pub struct Similarities {
+    pub ca: f32,
+    pub cb: f32,
+    pub cq: f32,
+    pub c2: f32,
+    pub c4: f32,
+}
+
+#[cfg(feature = "minilm")]
+pub fn embed_sims(question: &[u8], ground_truth: &[u8], answer: &[u8]) -> Similarities {
+    let question_embedding = encode(question);
+    let ground_truth_embedding = encode(ground_truth);
+    let answer_embedding = encode(answer);
+    let ca = crate::embed::cosine(&question_embedding, &ground_truth_embedding);
+    let cb = crate::embed::cosine(&ground_truth_embedding, &answer_embedding);
+    let cq = crate::embed::cosine(&question_embedding, &answer_embedding);
+    Similarities {
+        ca,
+        cb,
+        cq,
+        c2: cb,
+        c4: cb,
+    }
+}
+
+#[cfg(feature = "minilm")]
+pub fn embed_cos_abq(question: &[u8], ground_truth: &[u8], answer: &[u8]) -> (f32, f32, f32) {
+    let sims = embed_sims(question, ground_truth, answer);
+    (sims.ca, sims.cb, sims.cq)
+}

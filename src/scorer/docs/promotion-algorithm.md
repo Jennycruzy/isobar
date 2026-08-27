@@ -17,8 +17,9 @@ epoch-relative and must be refreshed before registration.
 | 6 | Average margin is strictly greater than the current champion's | champion-margin comparison |
 
 The local report also prints ties, p50/p99 latency, and a 1,000-iteration
-bit-identity check. Ties are not a separate threshold, but they can change
-rank agreement and fixture ordering after the final six-decimal quantization.
+bit-identity check. Ties are reported separately because a repeated identical
+input must tie by determinism, while a tie between distinct inputs usually
+means the contrast or final quantization is too coarse.
 
 ## Score identity
 
@@ -34,19 +35,26 @@ without re-establishing the champion and fixture pool.
 
 ## Module strategy
 
-The scorer computes one fixed raw composite and applies an endpoint-pinned,
-strictly increasing logistic transform:
+The WEATHER_CHECK scorer computes one fixed salience/fact raw value and applies
+the evidence-backed threshold calibration:
 
 ```text
-raw = baseline_composite(question, truth, answer)
-score = quantize6(contrast_norm(raw, K, C))
+raw = salience(question, truth, answer) + typed_weather_adjustment
+high = clamp((raw - 0.91) / 0.08)
+score = quantize6(0.96 * high + 0.04 * raw)
 ```
 
-Because the transform is monotonic, it preserves the baseline ordering before
-quantization. The harness measures ties after quantization so a steep curve is
-accepted only when it retains useful rank resolution.
+The `.95` centre is fit to this module's measured salience raw scale; it must
+not be copied to a scorer whose raw scale differs. The `.04` half-width and
+`.04` raw tail retain a graded interior and some rank resolution. The salience
+core uses the same compact vector table as the published source for bounded
+synonym credit, while typed weather checks are applied in the parent scorer.
+The WASM rank path does not run MiniLM, so its latency is suitable for the
+validator's fixture loop.
 
-Generate and select a measured frontier with an explicit tie constraint:
+The logistic sweep remains available for comparison, but it is not the default
+WEATHER_CHECK submission path. Generate and select a measured frontier with an
+explicit tie constraint:
 
 ```bash
 cargo run --release --features 'native-harness real_weights' \
@@ -57,10 +65,10 @@ python3 tools/select_frontier.py \
   --min-ordering 131 --max-ties 0
 ```
 
-The checked-in corpus contains 112 fit cases and 32 holdout cases. The
+The checked-in generic corpus contains 112 fit cases and 32 holdout cases. The
 independent traffic vector contains 17 rows and is emitted by the unmodified
 published baseline, rather than being copied from the candidate's raw score.
-On the combined 144-case corpus, the selected no-tie point is:
+Its old logistic snapshot remains a regression baseline:
 
 ```text
 K=16.0, C=0.4
@@ -73,10 +81,16 @@ ties         0
 
 The fit split measures margin `0.532802`, ordering `101/112`, and zero ties;
 the holdout split measures margin `0.559144`, ordering `30/32`, and zero ties.
-These results establish agreement with the local baseline proxy only. They do
-not establish that the live champion has the same traffic scores or fixture
-set. The curve is therefore intentionally moderate; a higher-K point may look
-better on margin while creating thousands of quantized ties.
+The current real WEATHER_CHECK history is the useful local proxy: with 200
+Explorer rows, the threshold path measures margin `0.994756`, ordering
+`200/200`, agreement `0.708337`, and a live champion bar of `0.98340964`.
+The generated 156-row fit split measures margin `0.590560`, ordering
+`117/156`, self-match `0.999603`, and agreement `0.708337`; the 44-row holdout
+measures margin `0.793219`, ordering `38/44`, self-match `0.979851`, and the
+same traffic agreement. Distinct-input ties are `9,379` on fit and `8,658` on
+holdout after final quantization; repeated identical inputs are reported
+separately. These results still do not replace the validator's live three-epoch
+gauntlet, and the tie counts remain a pre-registration issue.
 
 ## Epoch-271 calibration snapshot
 

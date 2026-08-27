@@ -1,6 +1,5 @@
 //! Native evaluation harness for the deterministic scorer.
 
-use isobar_scorer::embed::{self, Embedding};
 use isobar_scorer::scorer::{self, ScoringParams};
 use std::cmp::Ordering;
 use std::env;
@@ -66,6 +65,7 @@ struct Metrics {
     fixture_total: usize,
     agreement: f64,
     ties: usize,
+    duplicate_ties: usize,
     deterministic: bool,
     determinism_iterations: usize,
     latency: Latency,
@@ -91,42 +91,15 @@ struct RawCorpus {
     traffic: Vec<RawTrafficScores>,
 }
 
-struct EmbeddingCache {
-    entries: Vec<(String, Embedding)>,
+#[derive(Clone, Copy)]
+struct ScoreKey<'a> {
+    question: &'a str,
+    ground_truth: &'a str,
+    answer: &'a str,
 }
 
-impl EmbeddingCache {
-    fn new() -> Self {
-        Self {
-            entries: Vec::new(),
-        }
-    }
-
-    fn get(&mut self, text: &str) -> Embedding {
-        for (cached_text, embedding) in &self.entries {
-            if cached_text == text {
-                return *embedding;
-            }
-        }
-        let embedding = embed::encode(text.as_bytes());
-        self.entries.push((text.to_owned(), embedding));
-        embedding
-    }
-}
-
-fn cached_raw_score(
-    cache: &mut EmbeddingCache,
-    question: &str,
-    ground_truth: &str,
-    answer: &str,
-) -> f32 {
-    let question_embedding = cache.get(question);
-    let ground_truth_embedding = cache.get(ground_truth);
-    let answer_embedding = cache.get(answer);
-    scorer::raw_score_from_embeddings(
-        &question_embedding,
-        &ground_truth_embedding,
-        &answer_embedding,
+fn cached_raw_score(question: &str, ground_truth: &str, answer: &str) -> f32 {
+    scorer::raw_score(
         question.as_bytes(),
         ground_truth.as_bytes(),
         answer.as_bytes(),
@@ -235,6 +208,27 @@ fn parse_traffic(contents: &str) -> Result<Vec<TrafficRow>, String> {
     Ok(rows)
 }
 
+fn corpus_fixtures(rows: &[TrafficRow]) -> (Vec<Fixture>, Vec<BaselineFixtureScore>) {
+    let fixtures = rows
+        .iter()
+        .map(|row| Fixture {
+            question: row.question.clone(),
+            ground_truth: row.ground_truth.clone(),
+            good: row.ground_truth.clone(),
+            bad: row.answer.clone(),
+        })
+        .collect::<Vec<_>>();
+    let baseline = fixtures
+        .iter()
+        .map(|_| BaselineFixtureScore {
+            self_match: 1.0,
+            good: 1.0,
+            bad: 0.0,
+        })
+        .collect::<Vec<_>>();
+    (fixtures, baseline)
+}
+
 fn parse_champion_scores(contents: &str) -> Result<Vec<ChampionScore>, String> {
     let mut rows = Vec::new();
     for (line_number, line) in contents.lines().enumerate() {
@@ -285,20 +279,12 @@ fn champion_score(scores: &[ChampionScore], id: &str) -> Result<f32, String> {
 }
 
 fn score(params: ScoringParams, question: &str, truth: &str, answer: &str) -> f32 {
-    scorer::score_with_params(
-        question.as_bytes(),
-        truth.as_bytes(),
-        answer.as_bytes(),
-        params,
-    )
+    let raw = scorer::raw_score(question.as_bytes(), truth.as_bytes(), answer.as_bytes());
+    public_from_raw(raw, params)
 }
 
 fn public_from_raw(raw: f32, params: ScoringParams) -> f32 {
-    isobar_scorer::math::quantize6(isobar_scorer::math::contrast_norm(
-        raw,
-        params.steepness,
-        params.centre,
-    ))
+    scorer::public_score_from_raw(raw, params)
 }
 
 fn build_raw_corpus(
@@ -314,7 +300,6 @@ fn build_raw_corpus(
             fixtures.len()
         ));
     }
-    let mut cache = EmbeddingCache::new();
     let mut fixture_scores = Vec::with_capacity(fixtures.len());
     for (index, fixture) in fixtures.iter().enumerate() {
         let baseline = &baseline_fixtures[index];
@@ -323,30 +308,23 @@ fn build_raw_corpus(
             baseline_good: baseline.good,
             baseline_bad: baseline.bad,
             candidate_self_match: cached_raw_score(
-                &mut cache,
                 &fixture.question,
                 &fixture.ground_truth,
                 &fixture.ground_truth,
             ),
             candidate_good: cached_raw_score(
-                &mut cache,
                 &fixture.question,
                 &fixture.ground_truth,
                 &fixture.good,
             ),
-            candidate_bad: cached_raw_score(
-                &mut cache,
-                &fixture.question,
-                &fixture.ground_truth,
-                &fixture.bad,
-            ),
+            candidate_bad: cached_raw_score(&fixture.question, &fixture.ground_truth, &fixture.bad),
         });
     }
     let mut traffic_scores = Vec::with_capacity(traffic.len());
     for row in traffic {
         traffic_scores.push(RawTrafficScores {
             champion: champion_score(champion_scores, &row.id)?,
-            candidate: cached_raw_score(&mut cache, &row.question, &row.ground_truth, &row.answer),
+            candidate: cached_raw_score(&row.question, &row.ground_truth, &row.answer),
         });
     }
 
@@ -357,7 +335,7 @@ fn build_raw_corpus(
 }
 
 fn write_raw_cache(path: &str, corpus: &RawCorpus) -> Result<(), String> {
-    let mut contents = String::from("# isobar-scorer-raw-v3\n");
+    let mut contents = String::from("# isobar-scorer-raw-v4\n");
     for fixture in &corpus.fixtures {
         writeln!(
             &mut contents,
@@ -389,9 +367,13 @@ fn read_raw_cache(
     traffic_count: usize,
 ) -> Result<RawCorpus, String> {
     let contents = fs::read_to_string(path).map_err(|error| format!("read raw cache: {error}"))?;
-    if !contents.lines().any(|line| line == "# isobar-scorer-raw-v3") {
+    if !contents
+        .lines()
+        .any(|line| line == "# isobar-scorer-raw-v4")
+    {
         return Err(
-            "raw cache is not an independent baseline cache (expected isobar-scorer-raw-v3)".to_owned(),
+            "raw cache is not an independent baseline cache (expected isobar-scorer-raw-v4)"
+                .to_owned(),
         );
     }
     let mut fixtures = Vec::new();
@@ -545,20 +527,31 @@ fn spearman(champion: &[f32], candidate: &[f32]) -> f64 {
     pearson(&rank_values(champion), &rank_values(candidate))
 }
 
-fn pair_ties(values: &[f32]) -> usize {
-    let mut ties = 0;
+fn same_key(left: ScoreKey<'_>, right: ScoreKey<'_>) -> bool {
+    left.question == right.question
+        && left.ground_truth == right.ground_truth
+        && left.answer == right.answer
+}
+
+fn tie_counts(values: &[(f32, ScoreKey<'_>)]) -> (usize, usize) {
+    let mut distinct_ties = 0;
+    let mut duplicate_ties = 0;
     let mut left = 0;
     while left < values.len() {
         let mut right = left + 1;
         while right < values.len() {
-            if values[left] == values[right] {
-                ties += 1;
+            if values[left].0 == values[right].0 {
+                if same_key(values[left].1, values[right].1) {
+                    duplicate_ties += 1;
+                } else {
+                    distinct_ties += 1;
+                }
             }
             right += 1;
         }
         left += 1;
     }
-    ties
+    (distinct_ties, duplicate_ties)
 }
 
 fn percentile(sorted: &[u128], numerator: usize, denominator: usize) -> u128 {
@@ -591,34 +584,27 @@ fn measure_latency(params: ScoringParams, fixtures: &[Fixture], sample_count: us
     }
 }
 
-fn same_breakdown(left: &isobar_scorer::Breakdown, right: &isobar_scorer::Breakdown) -> bool {
-    left.relevance.to_bits() == right.relevance.to_bits()
-        && left.correctness.to_bits() == right.correctness.to_bits()
-        && left.lexical.to_bits() == right.lexical.to_bits()
-        && left.length_quality.to_bits() == right.length_quality.to_bits()
-        && left.raw_score.to_bits() == right.raw_score.to_bits()
-        && left.score.to_bits() == right.score.to_bits()
-}
-
 fn determinism_check(params: ScoringParams, fixtures: &[Fixture], iteration_count: usize) -> bool {
     if iteration_count == 0 {
         return true;
     }
     let fixture = &fixtures[0];
-    let reference = scorer::breakdown_with_params(
+    let reference_raw = scorer::raw_score(
         fixture.question.as_bytes(),
         fixture.ground_truth.as_bytes(),
         fixture.good.as_bytes(),
-        params,
     );
+    let reference_score = public_from_raw(reference_raw, params);
     for _ in 0..iteration_count {
-        let current = scorer::breakdown_with_params(
+        let current_raw = scorer::raw_score(
             fixture.question.as_bytes(),
             fixture.ground_truth.as_bytes(),
             fixture.good.as_bytes(),
-            params,
         );
-        if !same_breakdown(&reference, &current) {
+        let current_score = public_from_raw(current_raw, params);
+        if reference_raw.to_bits() != current_raw.to_bits()
+            || reference_score.to_bits() != current_score.to_bits()
+        {
             return false;
         }
     }
@@ -628,6 +614,7 @@ fn determinism_check(params: ScoringParams, fixtures: &[Fixture], iteration_coun
 fn evaluate(
     params: ScoringParams,
     fixtures: &[Fixture],
+    traffic: &[TrafficRow],
     raw_corpus: &RawCorpus,
     determinism_iterations: usize,
     latency_samples: usize,
@@ -636,7 +623,8 @@ fn evaluate(
     let mut margin_sum = 0.0f64;
     let mut ordering = 0;
     let mut candidate_scores = Vec::with_capacity(raw_corpus.fixtures.len() * 2);
-    for raw in &raw_corpus.fixtures {
+    for (index, raw) in raw_corpus.fixtures.iter().enumerate() {
+        let fixture = &fixtures[index];
         let self_score = public_from_raw(raw.candidate_self_match, params);
         let good = public_from_raw(raw.candidate_good, params);
         let bad = public_from_raw(raw.candidate_bad, params);
@@ -645,25 +633,52 @@ fn evaluate(
         if good > bad {
             ordering += 1;
         }
-        candidate_scores.push(good);
-        candidate_scores.push(bad);
+        candidate_scores.push((
+            good,
+            ScoreKey {
+                question: &fixture.question,
+                ground_truth: &fixture.ground_truth,
+                answer: &fixture.good,
+            },
+        ));
+        candidate_scores.push((
+            bad,
+            ScoreKey {
+                question: &fixture.question,
+                ground_truth: &fixture.ground_truth,
+                answer: &fixture.bad,
+            },
+        ));
     }
 
     let mut champion_scores = Vec::with_capacity(raw_corpus.traffic.len());
     let mut candidate_traffic_scores = Vec::with_capacity(raw_corpus.traffic.len());
-    for raw in &raw_corpus.traffic {
+    let mut traffic_values = Vec::with_capacity(raw_corpus.traffic.len());
+    for (index, raw) in raw_corpus.traffic.iter().enumerate() {
+        let row = &traffic[index];
         champion_scores.push(raw.champion);
-        candidate_traffic_scores.push(public_from_raw(raw.candidate, params));
+        let score = public_from_raw(raw.candidate, params);
+        candidate_traffic_scores.push(score);
+        traffic_values.push((
+            score,
+            ScoreKey {
+                question: &row.question,
+                ground_truth: &row.ground_truth,
+                answer: &row.answer,
+            },
+        ));
     }
     let agreement = spearman(&champion_scores, &candidate_traffic_scores);
-    let ties = pair_ties(&candidate_scores) + pair_ties(&candidate_traffic_scores);
+    let (fixture_ties, fixture_duplicate_ties) = tie_counts(&candidate_scores);
+    let (traffic_ties, traffic_duplicate_ties) = tie_counts(&traffic_values);
     Metrics {
         self_match,
         margin: margin_sum / fixtures.len() as f64,
         ordering,
         fixture_total: fixtures.len(),
         agreement,
-        ties,
+        ties: fixture_ties + traffic_ties,
+        duplicate_ties: fixture_duplicate_ties + traffic_duplicate_ties,
         deterministic: determinism_check(params, fixtures, determinism_iterations),
         determinism_iterations,
         latency: measure_latency(params, fixtures, latency_samples),
@@ -712,7 +727,8 @@ fn print_report(metrics: &Metrics, champion_margin: f64, champion_ordering: usiz
         metrics.agreement,
         if agreement_pass { "pass" } else { "FAIL" }
     );
-    println!("ties              {}", metrics.ties);
+    println!("ties (distinct)    {}", metrics.ties);
+    println!("duplicate-input ties {}", metrics.duplicate_ties);
     println!(
         "determinism       {} iterations [{}]",
         metrics.determinism_iterations,
@@ -743,7 +759,7 @@ fn print_report(metrics: &Metrics, champion_margin: f64, champion_ordering: usiz
 }
 
 fn usage() {
-    eprintln!("usage: isobar-scorer-harness [--fixtures PATH] [--baseline-fixtures PATH] [--traffic PATH] [--champion-scores PATH] [--raw-cache PATH] [--k VALUE] [--c VALUE] [--champion-margin VALUE] [--champion-ordering VALUE] [--determinism-iterations N] [--latency-samples N] [--sweep] [--sweep-k-max VALUE] [--sweep-centre-max VALUE]");
+    eprintln!("usage: isobar-scorer-harness [--fixtures PATH] [--baseline-fixtures PATH] [--traffic PATH] [--corpus PATH] [--champion-scores PATH] [--raw-cache PATH] [--k VALUE] [--c VALUE] [--champion-margin VALUE] [--champion-ordering VALUE] [--determinism-iterations N] [--latency-samples N] [--sweep] [--sweep-k-max VALUE] [--sweep-centre-max VALUE]");
 }
 
 fn main() {
@@ -751,6 +767,7 @@ fn main() {
     let mut fixture_path = None;
     let mut baseline_fixture_path = None;
     let mut traffic_path = None;
+    let mut corpus_path = None;
     let mut champion_scores_path = None;
     let mut raw_cache_path = None;
     let mut steepness = scorer::DEFAULT_STEEPNESS;
@@ -776,6 +793,10 @@ fn main() {
             "--traffic" => {
                 index += 1;
                 traffic_path = args.get(index).cloned();
+            }
+            "--corpus" => {
+                index += 1;
+                corpus_path = args.get(index).cloned();
             }
             "--champion-scores" => {
                 index += 1;
@@ -858,8 +879,8 @@ fn main() {
             std::process::exit(2);
         })
         .unwrap_or_else(|| DEFAULT_FIXTURES.to_owned());
-    let traffic_contents = traffic_path
-        .as_deref()
+    let traffic_source = corpus_path.as_deref().or(traffic_path.as_deref());
+    let traffic_contents = traffic_source
         .map(fs::read_to_string)
         .transpose()
         .unwrap_or_else(|error| {
@@ -885,24 +906,65 @@ fn main() {
             std::process::exit(2);
         })
         .unwrap_or_else(|| DEFAULT_CHAMPION_SCORES.to_owned());
-    let fixtures = parse_fixtures(&fixture_contents).unwrap_or_else(|error| {
-        eprintln!("could not parse fixtures: {error}");
-        std::process::exit(2);
-    });
-    let baseline_fixtures =
-        parse_baseline_fixtures(&baseline_fixture_contents).unwrap_or_else(|error| {
-            eprintln!("could not parse baseline fixtures: {error}");
-            std::process::exit(2);
-        });
-    let traffic = parse_traffic(&traffic_contents).unwrap_or_else(|error| {
+    let parsed_traffic = parse_traffic(&traffic_contents).unwrap_or_else(|error| {
         eprintln!("could not parse traffic: {error}");
         std::process::exit(2);
     });
-    let champion_scores =
+    let (fixtures, baseline_fixtures, traffic) = if corpus_path.is_some() {
+        let has_intent_prefix = parsed_traffic
+            .iter()
+            .any(|row| row.id.starts_with("weather-check-"));
+        let rows = if has_intent_prefix {
+            parsed_traffic
+                .into_iter()
+                .filter(|row| row.id.starts_with("weather-check-"))
+                .collect::<Vec<_>>()
+        } else {
+            parsed_traffic
+        };
+        if rows.is_empty() {
+            eprintln!("corpus contains no WEATHER_CHECK rows");
+            std::process::exit(2);
+        }
+        let (fixtures, baseline) = corpus_fixtures(&rows);
+        (fixtures, baseline, rows)
+    } else {
+        let fixtures = parse_fixtures(&fixture_contents).unwrap_or_else(|error| {
+            eprintln!("could not parse fixtures: {error}");
+            std::process::exit(2);
+        });
+        let baseline = if fixture_path.is_some() && baseline_fixture_path.is_none() {
+            // A generated real-traffic fixture set has no independent baseline
+            // vector. Keep the comparison fields neutral while still measuring
+            // the candidate's self-match, margin, ordering, and traffic rank.
+            fixtures
+                .iter()
+                .map(|_| BaselineFixtureScore {
+                    self_match: 1.0,
+                    good: 1.0,
+                    bad: 0.0,
+                })
+                .collect()
+        } else {
+            parse_baseline_fixtures(&baseline_fixture_contents).unwrap_or_else(|error| {
+                eprintln!("could not parse baseline fixtures: {error}");
+                std::process::exit(2);
+            })
+        };
+        (fixtures, baseline, parsed_traffic)
+    };
+    let mut champion_scores =
         parse_champion_scores(&champion_scores_contents).unwrap_or_else(|error| {
             eprintln!("could not parse champion scores: {error}");
             std::process::exit(2);
         });
+    if corpus_path.is_some()
+        && champion_scores
+            .iter()
+            .any(|row| row.id.starts_with("weather-check-"))
+    {
+        champion_scores.retain(|row| row.id.starts_with("weather-check-"));
+    }
 
     let raw_corpus = match raw_cache_path.as_deref() {
         Some(path) if Path::new(path).exists() => {
@@ -943,8 +1005,10 @@ fn main() {
                     ScoringParams {
                         steepness: k,
                         centre: c,
+                        threshold: false,
                     },
                     &fixtures,
+                    &traffic,
                     &raw_corpus,
                     0,
                     0,
@@ -966,8 +1030,13 @@ fn main() {
     }
 
     let metrics = evaluate(
-        ScoringParams { steepness, centre },
+        ScoringParams {
+            steepness,
+            centre,
+            threshold: true,
+        },
         &fixtures,
+        &traffic,
         &raw_corpus,
         determinism_iterations,
         latency_samples,

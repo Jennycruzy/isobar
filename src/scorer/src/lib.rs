@@ -14,6 +14,7 @@ pub mod embed;
 pub mod math;
 #[cfg(feature = "real_weights")]
 mod minilm;
+pub mod salience;
 pub mod scorer;
 pub mod tokenizer;
 pub mod weather;

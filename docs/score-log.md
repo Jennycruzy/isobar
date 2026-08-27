@@ -34,6 +34,30 @@ WEATHER_CHECK reference, with `K=16` and `C=0.4`:
 These are relative local measurements, not Explorer scores. They justify the
 current format experiment but do not prove rank 1.
 
+## Track 2 scorer calibration
+
+The 200-row WEATHER_CHECK history captured from Explorer on 2026-08-27 was
+converted into a four-column corpus. The live champion record available at the
+same capture was registration `#510`, with champion margin `0.98340964` and
+WEATHER_CHECK Spearman agreement `0.6128585`.
+
+The release artifact built from this tree is `25,340,967` bytes with SHA-256
+`6a05577caf9473e0c3bce214ba5c2d2b4b3a9d5f224d80f188a2e09da08118d6`.
+
+The submitted lexical/fact candidate measured locally as follows:
+
+| Corpus | Self-match | Margin | Ordering | Agreement | Distinct ties | Duplicate ties |
+|---|---:|---:|---:|---:|---:|---:|
+| 200-row Explorer history | `0.979851` | `0.994756` | `200/200` | `0.708337` | `17310` | `1434` |
+| 156-row adversarial fit | `0.999603` | `0.590560` | `117/156` | `0.708337` | `9379` | `879` |
+| 44-row adversarial holdout | `0.979851` | `0.793219` | `38/44` | `0.708337` | `8658` | `940` |
+
+All three runs passed the 1,000-iteration bit-identity check. The history
+margin is a local proxy: Explorer exposes the live score vector but not the
+champion's hidden fixture pairs, so it cannot prove the validator's strict
+separation gate. The non-zero tie counts are retained as an explicit
+pre-registration issue, not reported as a zero-tie pass.
+
 The local replica is not calibrated enough to replace live ordering: the
 deployed leader-shaped answer scored `0.507686` locally against the epoch-286
 reference, while the captured `verity-weather-forecast` leader scored `0.539871`
