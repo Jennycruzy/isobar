@@ -102,6 +102,15 @@ test('forecast echoes an evaluator window in reference-aligned framing', () => {
   });
   assert.equal(result.answer, 'The 48-hour hourly weather forecast for Gujranwala, Pakistan starts from 2026-09-01T06:00:00Z UTC with a cutoff deadline of 2026-09-01T12:00:00Z UTC. today high 37C low 27C moderate_rain; tomorrow high 35C low 26C partly_cloudy. Nearest hour 2026-08-26T01:00Z: 29.1C, 0.0mm, 4.2m/s, partly_cloudy.');
 });
+test('forecast echoes relative natural-language window and only requested fields', () => {
+  const prompt = 'Can you provide a 7-day hourly weather forecast for Tokyo, Japan starting from next Monday, including temperature in Celsius and precipitation probability, and deliver the forecast before the cutoff time of 2026-09-01T06:00:00Z?';
+  const result = forecastPayload(location, daily, 7, '2026-08-25T19:16:03.000Z', false, {
+    requestedFields: prompt, requestText: prompt
+  });
+  assert.match(result.answer, /^The 7-day hourly weather forecast for Gujranwala, Pakistan starting from next Monday, including temperature in Celsius and precipitation probability, before the cutoff time of 2026-09-01T06:00:00Z\. Available forecast:/);
+  assert.match(result.answer, /precipitation probability 65%/);
+  assert.ok(!result.answer.includes('wind speed'));
+});
 test('HTTP routes are graceful 200s and cap days', async () => {
   const calls = [];
   const service = { probe: async () => true, query: async (kind, input) => { calls.push({ kind, input }); return { answer: 'ok' }; } };

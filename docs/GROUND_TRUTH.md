@@ -149,3 +149,60 @@ the next live epoch decide.
    wrong digits, units, conditions, and locations.
 4. No public request counter is exposed for registration #224; its absence is
    not evidence of zero traffic.
+
+## Epoch 286 live comparison
+
+Captured from the public Explorer score API on 2026-08-27. The epoch endpoint
+reported `current_epoch: 286`. The excerpts below preserve the exact question,
+reference, and Isobar rendered answer used for the next format experiment.
+
+### WEATHER_CHECK
+
+Question:
+
+```text
+What is the current temperature and 'feels like' temperature in Tokyo, Japan, and what is the hourly forecast for the next 24 hours for the variable '2t' (temperature)?
+```
+
+Ground truth, verbatim:
+
+```text
+The current temperature in Tokyo, Japan is approximately **84°F (29°C)** with a "feels like" temperature of **93°F (34°C)**.
+
+The hourly forecast for the next 24 hours for the variable '2t' (temperature) in Tokyo shows temperatures ranging from approximately **27°C to 31°C (81°F to 88°F)**, with slight variations throughout the day.
+```
+
+Isobar rendered answer, verbatim:
+
+```text
+The current temperature in Tokyo, Japan is 24.7C, and it feels like 29.9C. Over the next 24 hours, temperatures range from 23C to 29C, with a chance of rain or showers, and precipitation chances ranging from 59% to 73%. As of 2026-08-27T09:30Z.
+```
+
+Explorer result: Isobar `#1/9`, `0.018964943`; `verity-current-weather` is `#2`,
+`0.015380494`; `weatherapi` is `#3`, `0.015171461`.
+
+### WEATHER_FORECAST
+
+Question:
+
+```text
+Can you provide a 7-day hourly weather forecast for Tokyo, Japan starting from next Monday, including temperature in Celsius and precipitation probability, and deliver the forecast before the cutoff time of 2026-09-01T06:00:00Z?
+```
+
+Ground truth, verbatim:
+
+```text
+Sorry, I can't provide the exact 7-day hourly weather forecast for Tokyo, Japan starting from next Monday, including temperature in Celsius and precipitation probability, before the cutoff time of 2026-09-01T06:00:00Z, as the available search results do not contain the specific hourly forecast data required. The results provide general weather information and forecasts for various dates but lack the detailed hourly breakdown needed for the requested period. For precise hourly forecasts, please check a reliable weather service or app closer to the date.
+```
+
+Isobar rendered answer from the scored row, verbatim:
+
+```text
+Tokyo forecast: today high 28C low 23C moderate_rain; tomorrow high 29C low 23C moderate_drizzle. Nearest hour 2026-08-27T10:00Z: 24.5C, 0.0mm, 0.6m/s, overcast.
+```
+
+Explorer result: `verity-weather-forecast` is `#1/11`, `0.0098297`; Isobar is
+`#2/11`, `0.0090172645`; `onlookout-weather` is `#3`, `0.00829008`. The Isobar
+row was scored at `2026-08-27T09:38:46.719342Z`, before the later natural-
+language forecast framing deployment. The deployed response is therefore a
+new experiment, not a retroactive explanation of this score.

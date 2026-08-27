@@ -53,3 +53,26 @@
 - Deployed `src/weather.js` and `src/server.js` at 2026-08-27 14:27:48 UTC;
   local and remote hashes match. The exact failing request now returns Tokyo,
   Japan, seven daily dates, and 168 hourly rows. `/health` remains green.
+
+## 2026-08-27 — epoch 286 score and forecast experiment
+
+- Explorer reports epoch 286 with Isobar WEATHER_CHECK at `#1/9`, score
+  `0.018964943`, and WEATHER_FORECAST at `#2/11`, score `0.0090172645`.
+  The forecast leader is `verity-weather-forecast` at `0.0098297`; this is a
+  same-intent comparison, not a cross-intent score target.
+- The epoch-286 forecast question asks for a 7-day hourly Tokyo forecast
+  starting next Monday and includes a cutoff at `2026-09-01T06:00:00Z`. Its
+  ground truth is a refusal-style response, so the older two-day template is
+  not the complete evidence for this epoch.
+- Added a forecast-only natural-language framing experiment. It echoes the
+  requested relative start, cutoff, and requested fields before the available
+  forecast while retaining all 7 daily and 168 hourly records in structured
+  JSON. The current-weather answer path is unchanged.
+- Deployed `src/weather.js` after 14/14 tests passed. The exact epoch question
+  returns HTTP 200, Tokyo/Japan, 7 daily rows, 168 hourly rows, and `/health`
+  returns HTTP 200 with `upstream_ok: true`.
+- Local and remote `src/weather.js` SHA-256 match at
+  `c4f7ad789e62f6d873315feaa114b4624866d0fe3e4984a67462466c19e7ef4d`; the
+  service reports active with zero restarts.
+- The Explorer row above predates this deployment; do not treat it as a
+  measurement of the framing experiment until a later row is scored.

@@ -1,6 +1,6 @@
 # Handoff
 
-Last checked: 2026-08-27 13:57 UTC.
+Last checked: 2026-08-27 14:31 UTC.
 
 ## Current state
 
@@ -8,8 +8,10 @@ Last checked: 2026-08-27 13:57 UTC.
 - Remote `isobar.service` is enabled and active with zero restarts.
 - Telegraph registration `224` is active; it is no longer pending.
 - Epoch 284 baseline: `WEATHER_CHECK #6/9`, `WEATHER_FORECAST #9/11`.
-- Current epoch-285 snapshot: `WEATHER_FORECAST #1`, score `0.008892506`.
-  Explorer currently has no epoch-285 `WEATHER_CHECK` score row for Isobar.
+- Current epoch-286 snapshot: `WEATHER_CHECK #1/9`, score `0.018964943`;
+  `WEATHER_FORECAST #2/11`, score `0.0090172645`.
+- Epoch-286 WEATHER_FORECAST leader is `verity-weather-forecast` at
+  `0.0098297`; its question/reference is captured in [`GROUND_TRUTH.md`](GROUND_TRUTH.md).
 - The live score is intent-specific and is not a promise of `0.019`. The prior
   `0.019` expectation was not supported by a live measurement; do not treat it
   as a guaranteed target.
@@ -19,6 +21,9 @@ Last checked: 2026-08-27 13:57 UTC.
   concise reference-aligned WEATHER_CHECK answer plus structured fields. For
   bounded forecast requests it also echoes the requested date/time window and
   cutoff wording, while retaining compact daily and nearest-hour facts.
+- Natural-language forecast prompts with a relative start or cutoff now echo
+  that requested framing and only the requested field names before the
+  available forecast; structured output remains complete.
 - Track 2 is the in-repository Isobar Scorer in `src/scorer/`; it is not a
   separate project. The scorer’s package/binary names were aligned to Isobar in
   `2ea0af7`. Its 13-test native suite, release WASM build, and 1,000-repeat
@@ -81,7 +86,7 @@ Last checked: 2026-08-27 13:57 UTC.
   The existing next-24-hour current-weather prompt remains on the current path.
 - The full Node suite passes 13/13. `src/weather.js` and `src/server.js` were
   deployed at 2026-08-27 14:27:48 UTC. Their local and remote SHA-256 values
-  are `2d2863b1a4cb82115ab63b0cfdcee496c8aedef0bf041a736cc0c66aaac7d814`
+  were `2d2863b1a4cb82115ab63b0cfdcee496c8aedef0bf041a736cc0c66aaac7d814`
   (`weather.js`) and
   `e8474e4eaa6b3edf99129df3c9720ba9aab41e2b8a507d15030bf3529e74b744`
   (`server.js`). The exact Alexandria-shaped request returned HTTP 200 for
@@ -90,6 +95,20 @@ Last checked: 2026-08-27 13:57 UTC.
 - This is an integration smoke test, not a new Explorer score. Alexandria may
   route future requests to whichever matching miner currently ranks highest;
   check the provider/receipt to confirm an Isobar call.
+
+## 2026-08-27 epoch-286 forecast experiment
+
+- Live epoch 286 is currently `WEATHER_CHECK #1/9` (`0.018964943`) and
+  `WEATHER_FORECAST #2/11` (`0.0090172645`). The forecast leader is
+  `verity-weather-forecast` (`0.0098297`).
+- The epoch-286 forecast row was scored before the latest forecast framing
+  deployment. The deployed response now echoes the exact relative-start and
+  cutoff language from the question and keeps the full forecast in JSON.
+- `npm run check` passes 14/14. Production smoke test: HTTP 200, Tokyo/Japan,
+  7 daily rows, 168 hourly rows; `/health` is HTTP 200 with `upstream_ok:true`.
+  The current deployed `weather.js` SHA-256 is
+  `c4f7ad789e62f6d873315feaa114b4624866d0fe3e4984a67462466c19e7ef4d` on both
+  local and remote hosts; the service is active with zero restarts.
 
 ## Next work
 

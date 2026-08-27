@@ -246,10 +246,40 @@ function forecastWindowLabel(start, end, days) {
   return `${days}-day hourly weather forecast`;
 }
 
+function requestedFieldTerms(fields) {
+  const text = String(scalar(fields) ?? '').toLowerCase().replace(/[_-]+/g, ' ');
+  if (!text) return [];
+  const terms = [];
+  if (text.includes('temperature')) terms.push('temperature in Celsius');
+  if (text.includes('precipitation probability')) terms.push('precipitation probability');
+  else if (text.includes('precipitation')) terms.push('precipitation');
+  if (text.includes('wind speed')) terms.push('wind speed');
+  return terms;
+}
+
+function joinTerms(terms) {
+  if (terms.length < 2) return terms[0] ?? '';
+  if (terms.length === 2) return `${terms[0]} and ${terms[1]}`;
+  return `${terms.slice(0, -1).join(', ')}, and ${terms.at(-1)}`;
+}
+
 function requestedFieldPhrase(fields) {
-  const text = String(scalar(fields) ?? '').toLowerCase();
-  if (!text || (!text.includes('temperature') && !text.includes('precipitation') && !text.includes('wind'))) return '';
-  return ' Including temperature in Celsius, precipitation probability, and wind speed.';
+  const terms = requestedFieldTerms(fields);
+  return terms.length ? ` Including ${joinTerms(terms)}.` : '';
+}
+
+function naturalRequestFraming(requestText, place, days, fields) {
+  const text = String(scalar(requestText) ?? '').trim();
+  if (!text) return '';
+  const start = text.match(/\bstarting\s+(?:from|on)\s+(.+?)(?=\s*,|\s+including\b|\s+with\b|\s+before\b|[?!.]|$)/i)?.[1]?.trim();
+  const cutoff = text.match(/\bbefore\s+the\s+cutoff\s+(?:time|deadline)\s+of\s+([^,?.!]+(?:Z|UTC)?)/i)?.[1]?.trim();
+  if (!start && !cutoff) return '';
+  const terms = requestedFieldTerms(fields);
+  let framing = `The ${days}-day hourly weather forecast for ${place}`;
+  if (start) framing += ` starting from ${start}`;
+  if (terms.length) framing += `, including ${joinTerms(terms)}`;
+  if (cutoff) framing += `, before the cutoff time of ${cutoff}`;
+  return `${framing}. Available forecast:`;
 }
 
 function nextDate(value) {
@@ -373,11 +403,14 @@ export function forecastPayload(location, body, days, retrievedAt, stale = false
   const endStamp = requestStamp(options.requestEnd, body.timezone ?? 'UTC');
   const windowLabel = forecastWindowLabel(options.requestStart, options.requestEnd, days);
   const fieldPhrase = requestedFieldPhrase(requestedFields);
+  const naturalFraming = naturalRequestFraming(options.requestText, place, days, requestedFields);
   let answer = startStamp && endStamp
     ? (hasClock(options.requestStart) || hasClock(options.requestEnd)
       ? `The ${windowLabel} for ${place} starts from ${startStamp} UTC with a cutoff deadline of ${endStamp} UTC.${fieldPhrase} ${sentences.join('; ')}`
       : `The ${windowLabel} for ${place} runs from ${startStamp} through ${endStamp} UTC.${fieldPhrase} ${sentences.join('; ')}`)
-    : `${location.name ?? label(location)} forecast: ${sentences.join('; ')}`;
+    : naturalFraming
+      ? `${naturalFraming} ${location.name ?? label(location)} forecast: ${sentences.join('; ')}`
+      : `${location.name ?? label(location)} forecast: ${sentences.join('; ')}`;
   if (nearest) {
     const nearestFacts = [];
     if (present(nearest.temp_c)) nearestFacts.push(`${one(nearest.temp_c)}C`);
@@ -458,7 +491,7 @@ export function createWeatherService({ fetchImpl = fetch, logger = console, now 
     url.search = new URLSearchParams(params);
     try {
       const body = await upstream(url, signal); const retrievedAt = now().toISOString();
-      const options = { requestStart, requestEnd, requestedFields: input.fields };
+      const options = { requestStart, requestEnd, requestedFields: input.fields, requestText: input.request_text };
       const payload = responseKind === 'current' ? currentPayload(location, body, retrievedAt) : forecastPayload(location, body, days, retrievedAt, false, options);
       weather.set(key, { payload, cachedAt: now().getTime() }); stale.set(key, { body, location, retrievedAt, options }); return payload;
     } catch (error) {

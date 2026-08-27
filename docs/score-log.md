@@ -10,6 +10,8 @@ WEATHER_CHECK and WEATHER_FORECAST.
 | 2026-08-26 21:19 UTC | pending | pending | `9d8e65f`: WEATHER_CHECK adds the requested feels-like and next-24-hour facts when hourly data is available; deployed separately. |
 | 285 current snapshot | no Isobar row | #1, `0.008892506` | Current [Explorer score record](https://explorer.telegraphprotocol.com/api/scores?intent=WEATHER_FORECAST&epoch=285&limit=1). Epoch-285 WEATHER_CHECK has no Isobar row yet. |
 | 2026-08-27 13:54 UTC | pending | pending | Deployed the validated `src/weather.js` date-window/field-contract fix; production smoke test passed. The epoch-285 row above was scored at 00:39 UTC, before deployment. |
+| 286 current snapshot | #1/9, `0.018964943` | #2/11, `0.0090172645` | [Explorer epoch-286 rows](https://explorer.telegraphprotocol.com/api/scores?intent=WEATHER_FORECAST&epoch=286&limit=200): Isobar leads WEATHER_CHECK; `verity-weather-forecast` leads WEATHER_FORECAST at `0.0098297`. The Isobar forecast row was scored before the natural-language framing deployment. |
+| 2026-08-27 14:31 UTC | unchanged | pending | Deployed the forecast-only natural-window framing experiment; exact epoch-286 prompt returns 7 daily and 168 hourly records. Awaiting a post-deployment score. |
 
 Epoch 285 now has a forecast snapshot, but the next complete post-fix Explorer
 epoch is the first measurement of the deployed date-window/field-contract fix.
