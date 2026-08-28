@@ -1,8 +1,8 @@
 # Telegraph registration record
 
 Status: Miner registered successfully and active in the Telegraph Explorer.
-The status and score snapshot below were checked on 2026-08-26 before the
-format-compatibility deployment.
+The on-chain record below is the pre-update state of registration `#224`; the
+prepared same-slug update is pending wallet confirmation.
 
 Use `integrate.telegraphprotocol.com` and the wizard; do not hand-write a manifest.
 
@@ -47,13 +47,22 @@ Alexandria may place the full question in `q`, `question`, `prompt`, or
 duration, and requested fields from that value and supports both `/weather` and
 `/forecast` routes.
 
-## STORM_ALERT preparation
+## Same-slug STORM_ALERT update
 
-The official supported-intent name is `STORM_ALERT` (not `STORM_CHECK`). A
-local `/storm` route is now implemented and tested, but it is intentionally
-not included in registration `#224` yet. Register it only as a separate
-intent after deploying and externally validating the route; the existing
-registration remains the source of truth for what is live.
+The official supported-intent name is `STORM_ALERT` (not `STORM_CHECK`). The
+local `/storm` route is implemented, deployed, and passed Telegraph's public
+YAML preflight. The prepared manifest adds `/storm` and `STORM_ALERT` to the
+existing `isobar-weather` identity:
+
+- YAML: `https://raw.githubusercontent.com/Jennycruzy/isobar/main/telegraph/isobar-weather.yaml`
+- SHA-256: `0xbbde8baab87d1f2464a3de6ec5f34050e6a1e8daa00457e6734f7eecb0a18de3`
+- preflight: `/weather`, `/forecast`, and `/storm` each returned HTTP 200
+
+Submit it from Dashboard → YAML registrations → Edit on `#224`. Telegraph's
+`updateMiner` operation replaces the old entry atomically and issues a new
+registration ID while keeping the `isobar-weather` slug and registering
+wallet. Do not create a separate `isobar-storm-alert` registration for this
+strategy.
 
 ## Scoring evidence
 

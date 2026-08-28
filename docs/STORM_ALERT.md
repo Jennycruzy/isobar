@@ -3,7 +3,9 @@
 The official Telegraph intent name is `STORM_ALERT`. Isobar's existing live
 registration `#224` currently covers only `WEATHER_CHECK` and
 `WEATHER_FORECAST`; this document records the local implementation prepared
-for a separate registration review.
+for a same-slug `updateMiner` operation. The intended result is one
+`isobar-weather` miner serving all three supported intents, not a second
+`isobar-storm-alert` identity.
 
 ## Response contract
 
@@ -37,5 +39,5 @@ indicator, not a government warning level.
 The implementation is covered by unit tests for prompt extraction, response
 format, unit conversion, caching-compatible service routing, and the gust-aware
 Open-Meteo request. It must still be exercised against live Telegraph
-`STORM_ALERT` traffic after registration; local fixtures are not a substitute
-for real Track 3 demand.
+`STORM_ALERT` traffic after the consolidated update; local fixtures are not a
+substitute for real Track 3 demand.
