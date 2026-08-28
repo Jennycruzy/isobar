@@ -17,6 +17,9 @@ real_weights = []
 # branch. It also enables the embedded runtime; WEATHER_CHECK keeps this path
 # off and uses the bounded lexical/fact implementation.
 minilm = ["real_weights"]
+# Compile the separate forecast calibration artifact. The default build remains
+# the already-calibrated WEATHER_CHECK scorer.
+forecast = []
 native-harness = []
 
 [dependencies]

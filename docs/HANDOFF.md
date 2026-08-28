@@ -1,6 +1,107 @@
 # Handoff
 
-Last checked: 2026-08-28 01:36 UTC.
+Last checked: 2026-08-28; Track 2 forecast artifact revalidated locally.
+
+## 2026-08-28 Track 2 forecast artifact revalidation
+
+- A fresh release harness run against the 200-row Explorer corpus reproduced
+  self-match `0.963415`, margin `0.988237`, ordering `200/200`, agreement
+  `0.781918`, zero distinct-input ties, and `1,559` duplicate-input ties.
+  The run cleared the live registration `#636` bar (`0.53020585`, `15/15`)
+  and passed 1,000 determinism iterations; latency was p50 `0.488 ms` and
+  p99 `5.997 ms`.
+- Fresh fit and holdout runs also reproduced the recorded diagnostics:
+  fit margin `0.383751` with `119/156` ordering, and holdout margin `0.335074`
+  with `31/44` ordering. Both passed the local `0.15` separation floor,
+  agreement, self-match, zero-distinct-tie, and 1,000-repeat gates.
+- Rebuilding `target/wasm32-unknown-unknown/release/isobar_scorer.wasm`
+  produced the recorded `1,110,008`-byte artifact byte-for-byte:
+  `0f1e06c3f253e63c611312a8a17742273db10066e5a4389b66b3d114a750c60c`.
+  Stable-toolchain formatting and all `31/31` Rust tests pass; wazero
+  compiler/interpreter ABI checks pass 1,000 repeats each.
+- No scorer logic change was justified by the refresh. The forecast source
+  remains uncommitted and no forecast WASM registration, upload, or push has
+  been made.
+
+## 2026-08-28 forecast horizon contract fix
+
+- Epoch 288's latest WEATHER_FORECAST question requested the next 48 hourly
+  temperatures at latitude `37.7749`, longitude `-122.4194`, using variable
+  `2t`. The deployed response ignored the hour horizon and returned a
+  three-day summary with only a nearest-hour fact; Isobar still ranked `#2/11`
+  at `0.006999269`.
+- The local runtime now accepts `hours`/`forecast_hours` aliases, parses
+  natural-language `question`/`prompt`/`request_text` values, extracts
+  latitude/longitude from a question when needed, requests the exact upstream
+  hour horizon, and caps the structured response to that horizon.
+- Short hour-bounded requests now use a concise scorer-facing window summary
+  while retaining every requested hourly row in `forecast`; longer hourly
+  requests keep the dated daily-plus-hourly leader shape.
+- New coordinate/horizon regressions are covered by the Node suite, which now
+  passes `18/18`. A replay of the epoch-288 payload produces exactly 48 rows.
+- Deployed `src/weather.js` to the VPS on 2026-08-28 at `09:28:36 UTC` after
+  checksum and remote syntax validation. The remote hash is
+  `4026e1b26967521e160af8a640fb8fe3738f7f19c4bd7ef98eda5d55b8908b6a`;
+  `/opt/isobar/src/weather.js.pre-20260828T091848Z` preserves the prior file.
+- Public verification passed: `/health` returned `upstream_ok: true`, and the
+  exact coordinate request returned `48` structured rows from
+  `2026-08-28T09:00Z` through `2026-08-30T08:00Z`. The next Explorer epoch is
+  the first live ranking measurement of this deployment; no new registration
+  has been made.
+
+## 2026-08-28 Track 2 forecast validation resumed
+
+- The missing public forecast capture was restored from
+  `/api/scores?intent=WEATHER_FORECAST&limit=200`: 200 rows, 23 unique
+  question/reference pairs, 11 miners, and epochs 264-288 (with the epochs
+  absent from the API response preserved as absent). The derived TSV and
+  fixture files are in `/private/tmp` and are not checked into `docs/`.
+- The forecast WASM build exposed a no-std portability issue in the new module:
+  `f32::fract` was unavailable for `wasm32-unknown-unknown`. The two checks now
+  use `libm::floorf`; host and WASM builds agree.
+- Forecast tie resolution now uses `LOW_TIE_WIDTH=768` and
+  `HIGH_TIE_WIDTH=65_536`, while the default WEATHER_CHECK widths remain
+  unchanged. The wider forecast high band removes distinct-input collisions
+  from the adversarial fit without changing the default lane.
+- Against the refreshed live forecast bar from registration `#636`
+  (`0.53020585`, ordering `15/15`, agreement `0.81260157`), the 200-row
+  forecast traffic run measured self-match `0.963415`, margin `0.988237`,
+  ordering `200/200`, agreement `0.781918`, zero distinct-input ties, and
+  `1,559` duplicate-input ties. The 1,000-repeat determinism check passed.
+- The 156-row fit diagnostic measured self-match `0.963415`, margin
+  `0.383751`, ordering `119/156`, agreement `0.781918`, and zero
+  distinct-input ties. The 44-row holdout measured self-match `0.984901`,
+  margin `0.335074`, ordering `31/44`, agreement `0.781918`, and zero
+  distinct-input ties. Fit/holdout strict-separation checks used the local
+  `0.15` floor; only the full traffic run was compared with the live bar.
+- The fresh forecast artifact is `1,110,008` bytes with SHA-256
+  `0f1e06c3f253e63c611312a8a17742273db10066e5a4389b66b3d114a750c60c`.
+  A clean local clone plus the uncommitted scorer patch produced byte-identical
+  output. Wazero compiler and interpreter checks both passed 1,000 repeats.
+- Default WEATHER_CHECK regression remains byte-identical at
+  `1,103,845` bytes, SHA-256
+  `b8a920df89f38245daa82e91174db4467c4941fb2e619dd98fbcb81cee116b94`.
+  Rust tests pass `21/21` in the default lane, `22/22` with `real_weights`,
+  and `31/31` with `native-harness forecast`; Node tests pass `16/16`.
+- No forecast WASM artifact has been registered, uploaded, or pushed. Source
+  changes remain uncommitted on top of `f82c056`.
+
+## 2026-08-28 Track 2 forecast calibration pause
+
+- The screenshot at `/Users/user/Pictures/Photos Library.photoslibrary/originals/9/96E4B874-948E-454D-8595-1DEC87AEEFC7.jpeg` shows a miner profile with `Avg score 0.992`. That is a profile aggregate across its listed signals, not the per-intent `WEATHER_FORECAST` WASM gate score. It is useful evidence that high aggregate scores exist, but it is not a comparable forecast leaderboard value.
+- The live `WEATHER_FORECAST` WASM bar captured from Explorer is registration `#636`: champion margin/eval `0.53020585`, ordering `15/15`, worst self-match `1.0`, and Spearman agreement `0.81260157`.
+- A 200-row forecast capture was fetched to `/private/tmp/isobar-weather-forecast-all.json` and converted to `/private/tmp/isobar-forecast-corpus.tsv`, with `/private/tmp/isobar-forecast-scores.tsv` and 78/22 fixture files. It contains 23 unique question/reference pairs across epochs 264–288, with repeated miner rows; it is not yet checked into `docs/`.
+- The working tree now contains a separate `forecast` feature path in `src/scorer/src/forecast.rs`. It uses fixed-array scoped facts for temperature, precipitation, probability, wind, conditions, coordinates, dates, stale observation timestamps, and forecast durations. The default `WEATHER_CHECK` path remains on the committed `weather.rs` implementation.
+- Before the final temporal-check edit, the release forecast corpus run measured self-match `0.931671`, margin `0.993072`, ordering `200/200`, agreement `0.785636`, zero distinct-input ties, and `1,559` repeated-input ties, with 1,000 determinism iterations passing. This exceeded the captured forecast champion margin, but is local evidence only.
+- The latest edit adds equal-count date comparison and `N-day`/`N-hour` duration comparison. The feature test suite passed `32/32`; the release harness and WASM runtime checks still need to be rerun after this edit.
+- No forecast WASM artifact has been registered, uploaded, or pushed. Current source changes are uncommitted on top of `f82c056`.
+
+Resume sequence after charging:
+
+1. Rebuild the forecast feature and rerun full, fit, and holdout harnesses. Treat zero distinct ties, ordering, agreement, self-match, and holdout stability as gates.
+2. Run `cargo fmt --all -- --check`, both-runtime wazero checks on the forecast WASM, and the clean-clone/hash check.
+3. Review the captured structured and refusal references before deciding whether the forecast detector is ready. Do not register until the temporal edit has a fresh artifact/hash and the forecast gate values are recorded.
+4. Keep registration intent-specific: submit `WEATHER_CHECK` and `WEATHER_FORECAST` only as separate, deliberate registrations if the platform permits it; never assume the profile aggregate is the intent score.
 
 ## 2026-08-28 Track 2 live-bar refresh
 

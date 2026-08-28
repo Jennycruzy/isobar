@@ -11,6 +11,8 @@
 pub mod allocator;
 pub mod bm25;
 pub mod embed;
+#[cfg(feature = "forecast")]
+pub mod forecast;
 pub mod math;
 #[cfg(feature = "real_weights")]
 mod minilm;

@@ -26,6 +26,7 @@ const WMO_SLUG = new Map([
   [95, 'thunderstorm'], [96, 'thunderstorm_with_slight_hail'],
   [99, 'thunderstorm_with_heavy_hail']
 ]);
+const WMO_CODE_BY_SLUG = new Map([...WMO_SLUG.entries()].map(([code, slug]) => [slug, code]));
 
 const COMPASS = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
 const LONG_COMPASS = ['north','north-northeast','northeast','east-northeast','east','east-southeast','southeast','south-southeast','south','south-southwest','southwest','west-southwest','west','west-northwest','northwest','north-northwest'];
@@ -83,6 +84,16 @@ function promptLocation(value) {
   return text;
 }
 
+function promptCoordinates(value) {
+  const text = String(nonEmpty(value) ?? '');
+  if (!text) return {};
+  const latitude = text.match(/\b(?:latitude|lat)\s*[:=]?\s*(-?\d+(?:\.\d+)?)/i)?.[1];
+  const longitude = text.match(/\b(?:longitude|lon)\s*[:=]?\s*(-?\d+(?:\.\d+)?)/i)?.[1];
+  if (latitude !== undefined && longitude !== undefined) return { latitude, longitude };
+  const pair = text.match(/\bcoordinates?\s*[:=]?\s*\(?\s*(-?\d+(?:\.\d+)?)\s*[,/]\s*(-?\d+(?:\.\d+)?)\s*\)?/i);
+  return pair ? { latitude: pair[1], longitude: pair[2] } : {};
+}
+
 export function isForecastRequest(value) {
   const text = String(nonEmpty(value) ?? '').toLowerCase();
   if (!text) return false;
@@ -95,24 +106,54 @@ function promptDays(value) {
   const text = String(nonEmpty(value) ?? '');
   const dayMatch = text.match(/\b(\d{1,2})\s*[- ]?day(?:s)?\b/i);
   if (dayMatch) return Number(dayMatch[1]);
-  const hourMatch = text.match(/\b(\d{1,3})\s*[- ]?hours?\b/i);
-  if (hourMatch) return Math.ceil(Number(hourMatch[1]) / 24);
+  const hours = promptHours(text);
+  if (hours !== undefined) return Math.ceil(hours / 24);
   return undefined;
 }
 
+function promptHours(value) {
+  const text = String(nonEmpty(value) ?? '');
+  const match = text.match(/\b(\d{1,3})\s*[- ]?(?:hours?|h)\b/i);
+  if (!match) return undefined;
+  const hours = Number(match[1]);
+  return Number.isInteger(hours) && hours > 0 ? hours : undefined;
+}
+
+function positiveInteger(value) {
+  const number = Number(scalar(value));
+  return Number.isInteger(number) && number > 0 ? number : undefined;
+}
+
+function requestTextInput(input, locationInput) {
+  return nonEmpty(input.request_text)
+    ?? nonEmpty(input.question)
+    ?? nonEmpty(input.prompt)
+    ?? nonEmpty(input.text)
+    ?? locationInput;
+}
+
 export function normalizeInput(input = {}) {
-  const locationInput = nonEmpty(input.q) ?? nonEmpty(input.location) ?? nonEmpty(input.city) ?? nonEmpty(input.place);
-  const requestText = nonEmpty(input.request_text) ?? locationInput;
-  const q = nonEmpty(input.request_text) ? locationInput : promptLocation(locationInput);
-  const lat = scalar(input.lat) ?? scalar(input.latitude);
-  const lon = scalar(input.lon) ?? scalar(input.longitude);
+  const locationInput = nonEmpty(input.q) ?? nonEmpty(input.location) ?? nonEmpty(input.city) ?? nonEmpty(input.place) ?? nonEmpty(input.query);
+  const requestText = requestTextInput(input, locationInput);
+  const q = locationInput && locationInput !== requestText ? locationInput : promptLocation(locationInput ?? requestText);
+  const coordinates = promptCoordinates(requestText);
+  const lat = scalar(input.lat) ?? scalar(input.latitude) ?? coordinates.latitude;
+  const lon = scalar(input.lon) ?? scalar(input.longitude) ?? coordinates.longitude;
   const requestStart = nonEmpty(input.start_time) ?? nonEmpty(input.startTime) ?? nonEmpty(input.start_date) ?? nonEmpty(input.startDate) ?? nonEmpty(input.start);
   const requestEnd = nonEmpty(input.end_time) ?? nonEmpty(input.endTime) ?? nonEmpty(input.end_date) ?? nonEmpty(input.endDate) ?? nonEmpty(input.end);
+  const rawRequestedHours = positiveInteger(input.hours)
+    ?? positiveInteger(input.forecast_hours)
+    ?? positiveInteger(input.forecastHours)
+    ?? positiveInteger(input.horizon_hours)
+    ?? positiveInteger(input.horizonHours)
+    ?? promptHours(requestText);
+  const requestedHours = rawRequestedHours === undefined ? undefined : Math.min(7 * 24, rawRequestedHours);
   const inferredDays = promptDays(requestText);
   const requestedFields = nonEmpty(input.fields) ?? (isForecastRequest(requestText) ? requestText : undefined);
   return {
     ...input, q, lat, lon, request_text: requestText,
-    days: scalar(input.days) ?? inferredDays,
+    days: scalar(input.days) ?? (requestedHours ? Math.ceil(requestedHours / 24) : inferredDays),
+    hours: requestedHours,
     fields: requestedFields,
     start_time: requestStart, end_time: requestEnd
   };
@@ -368,13 +409,14 @@ export function currentPayload(location, body, retrievedAt, stale = false) {
   };
 }
 
-function forecastRows(body) {
+function forecastRows(body, maxHours) {
   const h = body.hourly ?? {};
   const hu = body.hourly_units ?? {};
   const times = h.time ?? [];
   const timezone = body.timezone ?? 'UTC';
   const rows = [];
-  for (let i = 0; i < times.length; i++) {
+  const count = maxHours === undefined ? times.length : Math.min(times.length, maxHours);
+  for (let i = 0; i < count; i++) {
     const row = { time: isoMinute(times[i], timezone) };
     if (present(h.temperature_2m?.[i])) row.temp_c = Number(one(h.temperature_2m[i]));
     if (present(h.precipitation?.[i])) row.precip_mm = Number(one(h.precipitation[i]));
@@ -397,6 +439,30 @@ function nearestRow(rows, target) {
   });
 }
 
+function windowForecastAnswer(location, rows, hours, startStamp, endStamp) {
+  if (!rows.length) return `${location.name ?? label(location)} forecast: no hourly forecast data was returned`;
+  const temperatures = rows.map((row) => Number(row.temp_c)).filter(Number.isFinite);
+  const codes = rows.map((row) => WMO_CODE_BY_SLUG.get(row.conditions)).filter((value) => value !== undefined);
+  const totalPrecipitation = rows.map((row) => Number(row.precip_mm)).filter(Number.isFinite).reduce((sum, value) => sum + value, 0);
+  const place = location.name && location.country ? `${location.name}, ${location.country}` : location.name ?? label(location);
+  const range = temperatures.length
+    ? `temperatures ranging from ${integer(Math.min(...temperatures))}C to ${integer(Math.max(...temperatures))}C`
+    : 'hourly temperature data';
+  const condition = horizonCondition(codes);
+  let answer = `The forecast for the next ${hours} hours at ${place}`;
+  if (startStamp && endStamp) answer += ` starts from ${startStamp} UTC with a cutoff deadline of ${endStamp} UTC`;
+  else answer += ` is valid through ${rows.at(-1).time}`;
+  answer += `, with ${range}`;
+  if (condition) answer += ` and ${condition} conditions`;
+  answer += '.';
+  answer += totalPrecipitation === 0
+    ? ' No precipitation is expected.'
+    : totalPrecipitation < 1
+      ? ` Minimal precipitation is expected (${decimal(totalPrecipitation)}mm total).`
+      : ` Total precipitation is expected to reach ${decimal(totalPrecipitation)}mm.`;
+  return answer;
+}
+
 export function forecastPayload(location, body, days, retrievedAt, stale = false, options = {}) {
   location = { ...location, timezone: location.timezone === 'auto' || !location.timezone ? body.timezone : location.timezone };
   const d = body.daily ?? {}; const u = body.daily_units ?? {};
@@ -412,7 +478,7 @@ export function forecastPayload(location, body, days, retrievedAt, stale = false
     if (includeRequestedFields && present(d.precipitation_probability_max?.[i])) facts.push(`precipitation probability ${integer(d.precipitation_probability_max[i])}%`);
     sentences.push(facts.join(' '));
   }
-  const rows = forecastRows(body);
+  const rows = forecastRows(body, options.requestedHours);
   const nearest = nearestRow(rows, options.requestStart ?? retrievedAt);
   const place = location.name && location.country ? `${location.name}, ${location.country}` : location.name ?? label(location);
   const startStamp = requestStamp(options.requestStart, body.timezone ?? 'UTC');
@@ -420,8 +486,10 @@ export function forecastPayload(location, body, days, retrievedAt, stale = false
   const windowLabel = forecastWindowLabel(options.requestStart, options.requestEnd, days);
   const fieldPhrase = requestedFieldPhrase(requestedFields);
   const naturalFraming = naturalRequestFraming(options.requestText, place, days, requestedFields);
-  let answer = options.renderHourly
-    ? detailedForecastAnswer(location, body, days)
+  let answer = options.requestedHours !== undefined && options.requestedHours <= 48
+    ? windowForecastAnswer(location, rows, options.requestedHours, startStamp, endStamp)
+    : options.renderHourly
+    ? detailedForecastAnswer(location, body, days, options.requestedHours)
     : startStamp && endStamp
     ? (hasClock(options.requestStart) || hasClock(options.requestEnd)
       ? `The ${windowLabel} for ${place} starts from ${startStamp} UTC with a cutoff deadline of ${endStamp} UTC.${fieldPhrase} ${sentences.join('; ')}`
@@ -440,15 +508,22 @@ export function forecastPayload(location, body, days, retrievedAt, stale = false
   }
   if (!answer.endsWith('.')) answer += '.';
   if (stale) answer += ' This is the most recent cached forecast because the live weather service is temporarily unavailable.';
-  return { answer, location, daily: d, daily_units: u, forecast: rows, source: 'open-meteo', retrieved_at: stale ? `${retrievedAt} (stale)` : retrievedAt };
+  return {
+    answer, location, daily: d, daily_units: u, forecast: rows,
+    requested_hours: options.requestedHours,
+    source: 'open-meteo', retrieved_at: stale ? `${retrievedAt} (stale)` : retrievedAt
+  };
 }
 
-function detailedForecastAnswer(location, body, days) {
+function detailedForecastAnswer(location, body, days, requestedHours) {
   const d = body.daily ?? {};
   const du = body.daily_units ?? {};
   const h = body.hourly ?? {};
   const hu = body.hourly_units ?? {};
-  const dailyCount = Math.min(days, d.time?.length ?? 0);
+  const dailyCount = Math.min(
+    requestedHours === undefined ? days : Math.ceil(requestedHours / 24),
+    d.time?.length ?? 0
+  );
   const dailyParts = [];
   for (let i = 0; i < dailyCount; i++) {
     const facts = [];
@@ -467,7 +542,8 @@ function detailedForecastAnswer(location, body, days) {
   }
   const times = h.time ?? [];
   const hourlyParts = [];
-  for (let i = 0; i < times.length; i++) {
+  const hourlyCount = requestedHours === undefined ? times.length : Math.min(times.length, requestedHours);
+  for (let i = 0; i < hourlyCount; i++) {
     const timestamp = isoMinute(times[i], body.timezone ?? 'UTC').replace(/Z$/, '');
     const condition = present(h.weather_code?.[i]) ? forecastCondition(h.weather_code[i]) : '';
     const facts = [];
@@ -524,18 +600,21 @@ export function createWeatherService({ fetchImpl = fetch, logger = console, now 
     const location = await locate(input, signal);
     if (!location) return { answer: `The location “${input.q ?? 'provided input'}” was not found, so current weather data is unavailable. Please check the spelling or provide latitude and longitude.`, location: null, source: 'open-meteo', retrieved_at: now().toISOString() };
     const explicitDays = Number.parseInt(scalar(input.days) ?? '', 10);
+    const requestedHours = positiveInteger(input.hours);
     const coord = `${Number(location.latitude).toFixed(4)},${Number(location.longitude).toFixed(4)}`;
     const requestStart = scalar(input.start_time);
     const requestEnd = scalar(input.end_time);
     const startDate = datePart(requestStart); const endDate = datePart(requestEnd);
     const boundedDays = dateSpanDays(startDate, endDate);
-    const defaultDays = Number.isFinite(explicitDays) && explicitDays > 0 ? explicitDays : 3;
+    const defaultDays = Number.isFinite(explicitDays) && explicitDays > 0
+      ? explicitDays
+      : requestedHours ? Math.ceil(requestedHours / 24) : 3;
     const timestampFallbackDays = startDate && endDate && boundedDays === 1 && (hasClock(requestStart) || hasClock(requestEnd)) && !Number.isFinite(explicitDays) ? 2 : undefined;
     const days = Math.min(7, Math.max(1, timestampFallbackDays ?? boundedDays ?? defaultDays));
-    const fetchEndDate = kind === 'forecast' && startDate
+    const fetchEndDate = responseKind === 'forecast' && startDate
       ? (endDate && endDate > startDate ? endDate : nextDate(startDate))
       : endDate;
-    const key = `${responseKind}:${coord}:${responseKind === 'forecast' ? `${days}:${startDate ?? ''}:${fetchEndDate ?? ''}` : ''}`; const hit = weather.get(key);
+    const key = `${responseKind}:${coord}:${responseKind === 'forecast' ? `${days}:${requestedHours ?? ''}:${startDate ?? ''}:${fetchEndDate ?? ''}` : ''}`; const hit = weather.get(key);
     if (hit && now().getTime() - hit.cachedAt < 60_000) return hit.payload;
     const url = new URL(FORECAST_URL); const params = { latitude: location.latitude, longitude: location.longitude, timezone: 'UTC', wind_speed_unit: 'ms' };
     if (responseKind === 'current') {
@@ -551,21 +630,28 @@ export function createWeatherService({ fetchImpl = fetch, logger = console, now 
       if (startDate) {
         params.start_date = startDate;
         params.end_date = fetchEndDate ?? nextDate(startDate);
-      } else params.forecast_days = String(days);
+      } else {
+        params.forecast_days = String(days);
+        if (requestedHours !== undefined) params.forecast_hours = String(Math.min(7 * 24, requestedHours));
+      }
     }
     url.search = new URLSearchParams(params);
     try {
       const body = await upstream(url, signal); const retrievedAt = now().toISOString();
+      const variableText = [input.variable, input.variables].map((value) => String(scalar(value) ?? '')).join(' ');
       const options = {
         requestStart, requestEnd, requestedFields: input.fields, requestText: input.request_text,
+        requestedHours,
         // Telegraph's forecast requests may carry a multi-day window without
         // forwarding the original "hourly" field. Long windows are the
         // hourly forecast intent in practice and must use the same complete
         // answer shape as explicitly hourly requests.
         renderHourly: responseKind === 'forecast' && (
+          requestedHours !== undefined ||
           days > 2 ||
           String(input.interval ?? '').toLowerCase() === 'hourly' ||
-          /\bhourly\b/i.test(input.request_text ?? '')
+          /\bhourly\b/i.test(input.request_text ?? '') ||
+          /\b(?:2t|temperature_2m)\b/i.test(variableText)
         )
       };
       const payload = responseKind === 'current' ? currentPayload(location, body, retrievedAt) : forecastPayload(location, body, days, retrievedAt, false, options);

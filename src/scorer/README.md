@@ -17,12 +17,19 @@ The toolchain is pinned in `rust-toolchain.toml`.
 cargo test --features native-harness --all-targets
 cargo build --release --target wasm32-unknown-unknown
 cargo build --release --target wasm32-unknown-unknown --features real_weights
+
+# Build the separate WEATHER_FORECAST calibration artifact.
+cargo build --release --target wasm32-unknown-unknown --features forecast
 ```
 
 The module is written to
 `target/wasm32-unknown-unknown/release/isobar_scorer.wasm`. The normal WASM build does
 not compile the native harness, so the module has a single panic implementation
 and can be loaded by a wazero host.
+
+The optional `forecast` feature selects the separate WEATHER_FORECAST typed-fact
+path in `forecast.rs`; it does not change the default WEATHER_CHECK artifact.
+Its forecast calibration uses low/high tie-band widths of `768`/`65,536`.
 
 The checked-in Go host tester uses wazero `v1.11.0` to validate the binary's
 exports, linear-memory writes, ABI calls, breakdown layout, score bounds, and

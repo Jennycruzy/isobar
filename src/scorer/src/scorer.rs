@@ -6,6 +6,18 @@ use crate::math;
 use crate::salience;
 use crate::Breakdown;
 
+#[cfg(feature = "forecast")]
+#[inline]
+fn typed_adjustment(question: &[u8], reference: &[u8], candidate: &[u8]) -> f32 {
+    crate::forecast::adjustment(question, reference, candidate)
+}
+
+#[cfg(not(feature = "forecast"))]
+#[inline]
+fn typed_adjustment(question: &[u8], reference: &[u8], candidate: &[u8]) -> f32 {
+    crate::weather::adjustment(question, reference, candidate)
+}
+
 // The salience module supplies the weather-lane raw score. The default public
 // path uses its calibrated threshold contrast; the logistic path remains
 // available to the harness for controlled curve comparisons.
@@ -34,7 +46,13 @@ pub struct ScoringParams {
 // captured WEATHER_CHECK corpus and the resulting score is still quantized to
 // six decimal places.
 const ZERO_TIE_SLOTS: u32 = 1_000;
+#[cfg(feature = "forecast")]
+const LOW_TIE_WIDTH: u32 = 768;
+#[cfg(not(feature = "forecast"))]
 const LOW_TIE_WIDTH: u32 = 64;
+#[cfg(feature = "forecast")]
+const HIGH_TIE_WIDTH: u32 = 65_536;
+#[cfg(not(feature = "forecast"))]
 const HIGH_TIE_WIDTH: u32 = 512;
 const ZERO_TIE_SEED: u64 = 7_599;
 const LOW_TIE_SEED: u64 = 44_115;
@@ -303,5 +321,5 @@ pub fn baseline_score(question: &[u8], ground_truth: &[u8], miner_answer: &[u8])
 
 pub fn raw_score(question: &[u8], ground_truth: &[u8], miner_answer: &[u8]) -> f32 {
     let lexical = salience::raw_score(question, ground_truth, miner_answer);
-    math::clamp01(lexical + crate::weather::adjustment(question, ground_truth, miner_answer))
+    math::clamp01(lexical + typed_adjustment(question, ground_truth, miner_answer))
 }

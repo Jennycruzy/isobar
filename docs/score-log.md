@@ -3,6 +3,104 @@
 Scores and ranks are intent-specific. Values below are not comparable between
 WEATHER_CHECK and WEATHER_FORECAST.
 
+## Track 2 forecast artifact revalidation — 2026-08-28
+
+The forecast-enabled native harness was rebuilt and rerun from the captured
+Explorer corpus. The full 200-row run reproduced self-match `0.963415`, margin
+`0.988237`, ordering `200/200`, agreement `0.781918`, zero distinct-input
+ties, and `1,559` duplicate-input ties. It cleared the live registration `#636`
+bar (`0.53020585`, `15/15`) and passed 1,000 determinism iterations; latency
+was p50 `0.488 ms` and p99 `5.997 ms`.
+
+The 156-row fit and 44-row holdout reruns reproduced margins `0.383751` and
+`0.335074`, with ordering `119/156` and `31/44`; both passed the local `0.15`
+separation floor and all scorer gates. Stable-toolchain formatting, `31/31`
+Rust tests, and wazero compiler/interpreter ABI checks at 1,000 repeats pass.
+
+The rebuilt artifact remains `1,110,008` bytes with SHA-256
+`0f1e06c3f253e63c611312a8a17742273db10066e5a4389b66b3d114a750c60c` and is
+byte-identical to the recorded candidate. No new scorer logic or registration
+was made.
+
+## Forecast horizon contract fix — 2026-08-28
+
+The latest epoch-288 WEATHER_FORECAST question requested 48 hourly temperature
+values at coordinates `37.7749, -122.4194` using `2t`. The deployed Isobar row
+was `#2/11` at `0.006999269`, but its answer fell back to a three-day summary
+because the hour horizon was not being consumed.
+
+The local fix accepts `hours`/`forecast_hours`, extracts coordinates and
+horizons from natural-language request fields, requests the exact upstream
+hour horizon, and limits structured output to the requested rows. Short
+hour-bounded requests now have a concise exact-window scorer-facing summary;
+longer hourly requests retain the dated daily-plus-hourly format. Node tests
+pass `18/18`, and the captured epoch-288 payload replays to exactly 48 rows.
+
+The runtime was deployed at `2026-08-28 09:28:36 UTC` with SHA-256
+`4026e1b26967521e160af8a640fb8fe3738f7f19c4bd7ef98eda5d55b8908b6a`.
+Public verification returned `upstream_ok: true`; the exact coordinate request
+returned `requested_hours: 48` and `forecast_rows: 48`. The next complete
+Explorer epoch is the first live score measurement of this patch. No new
+forecast registration was made.
+
+## Track 2 forecast validation resumed — 2026-08-28
+
+The missing capture was restored from the public Explorer score endpoint and
+contains 200 `WEATHER_FORECAST` rows across 23 unique question/reference pairs.
+The live WASM bar remains registration `#636`: margin/eval `0.53020585`,
+ordering `15/15`, and agreement `0.81260157`.
+
+The new forecast module uses `libm::floorf` for the no-std WASM date/duration
+checks. Forecast-only tie resolution uses low-band width `768` and high-band
+width `65_536`; the default WEATHER_CHECK widths are unchanged.
+
+| Corpus | Self-match | Margin | Ordering | Agreement | Distinct ties | Duplicate ties |
+|---|---:|---:|---:|---:|---:|---:|
+| 156-row adversarial fit | `0.963415` | `0.383751` | `119/156` | `0.781918` | `0` | `1344` |
+| 44-row adversarial holdout | `0.984901` | `0.335074` | `31/44` | `0.781918` | `0` | `543` |
+| 200-row Explorer corpus as traffic | `0.963415` | `0.988237` | `200/200` | `0.781918` | `0` | `1559` |
+
+All three runs passed 1,000 determinism iterations. Fit and holdout strict
+separation used the local `0.15` floor; the full traffic run cleared the live
+forecast bar. The full run's p50/p99 latency was `0.812/12.260 ms`.
+
+The forecast WASM is `1,110,008` bytes with SHA-256
+`0f1e06c3f253e63c611312a8a17742273db10066e5a4389b66b3d114a750c60c`. A clean
+local clone reproduced the same bytes, and wazero compiler/interpreter checks
+both passed 1,000 repeats. No forecast registration has been submitted.
+
+## Track 2 forecast calibration pause — 2026-08-28
+
+The miner-profile screenshot showing `Avg score 0.992` belongs to another
+miner profile and aggregates several signals, including `STORM_ALERT` and
+`WEATHER_FORECAST`. It is not the forecast intent's WASM margin. The live
+forecast champion bar used here is registration `#636`, margin/eval
+`0.53020585`, ordering `15/15`, and Spearman agreement `0.81260157`.
+
+The Explorer capture contains 200 forecast rows from epochs 264–288. The
+current forecast feature candidate was measured immediately before the latest
+temporal edit at:
+
+| Corpus | Self-match | Margin | Ordering | Agreement | Distinct ties | Duplicate ties |
+|---|---:|---:|---:|---:|---:|---:|
+| 200-row history as traffic | `0.931671` | `0.993072` | `200/200` | `0.785636` | `0` | `1559` |
+
+The candidate uses deterministic fixed-array fact checks and a forecast-specific
+secondary-key band (`LOW_TIE_WIDTH=768`, `HIGH_TIE_WIDTH=1024`). The latest
+unmeasured edit adds equal-count date mismatch and forecast-duration checks so
+`7-day` versus `17-day` and stale date substitutions are visible to the scorer.
+The feature tests pass `32/32`; release and wazero measurements after that edit
+are pending. The source is uncommitted and no forecast WASM registration has
+been submitted.
+
+Capture and temporary harness inputs are currently at:
+
+```text
+/private/tmp/isobar-weather-forecast-all.json
+/private/tmp/isobar-forecast-corpus.tsv
+/private/tmp/isobar-forecast-scores.tsv
+```
+
 | Epoch / time | WEATHER_CHECK | WEATHER_FORECAST | Change / evidence |
 |---|---:|---:|---|
 | 284 baseline | #6/9, `0.013609781` | #9/11, `0.002964984` | Both validator requests used unsupported `location`/`city` aliases; captured in [`GROUND_TRUTH.md`](GROUND_TRUTH.md). |

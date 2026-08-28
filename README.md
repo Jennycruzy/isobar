@@ -39,9 +39,12 @@ Canonical inputs are `/weather?q=...` and `/forecast?q=...&days=2`; `lat` and
 `lon` may replace `q`. For compatibility with evaluator-generated requests,
 `location` and `city` are accepted as place-name aliases, `latitude` and
 `longitude` are accepted as coordinate aliases, and forecast requests may
-include `start_time`/`end_time` ISO timestamps or inclusive `start_date`/
-`end_date` bounds. Forecasts default to three days when no `days` or date
-window is supplied and are capped at seven days.
+include `start_time`/`end_time` ISO timestamps, inclusive `start_date`/
+`end_date` bounds, or `hours`/`forecast_hours` horizons. Natural-language
+requests may also arrive in `question`, `prompt`, or `request_text`; location,
+coordinates, day/hour horizons, and requested fields are extracted when
+present. Forecasts default to three days when no horizon is supplied and are
+capped at seven days or 168 hourly rows.
 
 Examples:
 
@@ -58,9 +61,10 @@ example is:
 The current temperature in Tokyo, Japan is 25.0C, and it feels like 31.0C. Over the next 24 hours, temperatures range from 22C to 30C, with a chance of rain or showers, and precipitation chances ranging from 34% to 84%. As of 2026-08-26T21:15Z.
 ```
 
-WEATHER_FORECAST answers contain the requested daily summaries and a
-nearest-hour record; the structured `forecast` array carries the hourly values
-when available. The detailed measurements remain in JSON in both routes.
+WEATHER_FORECAST answers contain a concise exact-window summary for short
+hour-based requests and the structured `forecast` array carries exactly the
+requested hourly values. Longer hourly requests use dated daily summaries plus
+hourly facts; the detailed measurements remain in JSON in both routes.
 
 ## Use through Alexandria
 

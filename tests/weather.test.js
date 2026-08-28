@@ -56,6 +56,16 @@ test('normalizes Alexandria natural-language weather prompts', () => {
   assert.equal(isForecastRequest(prompt), true);
   assert.match(result.fields, /precipitation probability/);
 });
+test('normalizes coordinate hourly forecast requests and their horizon', () => {
+  const prompt = "Can you provide the temperature forecast for the next 48 hours at latitude 37.7749 and longitude -122.4194, using the '2t' variable for hourly data?";
+  const result = normalizeInput({ question: prompt });
+  assert.equal(result.lat, '37.7749');
+  assert.equal(result.lon, '-122.4194');
+  assert.equal(result.hours, 48);
+  assert.equal(result.days, 2);
+  assert.equal(result.request_text, prompt);
+  assert.equal(isForecastRequest(prompt), true);
+});
 test('keeps a next-24-hour current question on the current route', () => {
   const prompt = "What is the current temperature and 'feels like' temperature in Tokyo, Japan, and what is the forecast for the next 24 hours including any chance of precipitation?";
   assert.equal(normalizeInput({ q: prompt }).q, 'Tokyo, Japan');
@@ -179,6 +189,50 @@ test('service accepts evaluator aliases and requests UTC metric forecast data', 
   assert.equal(urls[1].searchParams.get('start_date'), '2026-09-01');
   assert.equal(urls[1].searchParams.get('end_date'), '2026-09-02');
   assert.equal(urls[1].searchParams.get('hourly'), 'temperature_2m,dew_point_2m,precipitation,precipitation_probability,weather_code,wind_speed_10m');
+});
+
+test('service honors exact coordinate hourly horizons', async () => {
+  const urls = [];
+  const hourlyTimes = Array.from({ length: 72 }, (_, index) => new Date(Date.UTC(2026, 7, 26, index)).toISOString().slice(0, 16));
+  const threeDay = {
+    ...daily,
+    daily: {
+      ...daily.daily,
+      time: ['2026-08-26', '2026-08-27', '2026-08-28'],
+      weather_code: [63, 2, 3],
+      temperature_2m_max: [36.8, 35.1, 34],
+      temperature_2m_min: [27.1, 26.4, 25]
+    },
+    hourly: {
+      ...daily.hourly,
+      time: hourlyTimes,
+      temperature_2m: Array(72).fill(25),
+      dew_point_2m: Array(72).fill(20),
+      precipitation: Array(72).fill(0),
+      precipitation_probability: Array(72).fill(5),
+      weather_code: Array(72).fill(2),
+      wind_speed_10m: Array(72).fill(1)
+    }
+  };
+  const service = (await import('../src/weather.js')).createWeatherService({
+    now: () => new Date('2026-08-28T03:00:00Z'), logger: { info() {} },
+    fetchImpl: async (url) => {
+      urls.push(new URL(url));
+      return { ok: true, json: async () => threeDay };
+    }
+  });
+  const result = await service.query('forecast', {
+    latitude: '37.7749', longitude: '-122.4194', forecast_hours: '48', variable: '2t'
+  }, AbortSignal.timeout(1000));
+  assert.equal(urls.length, 1);
+  assert.equal(urls[0].searchParams.get('forecast_days'), '2');
+  assert.equal(urls[0].searchParams.get('forecast_hours'), '48');
+  assert.equal(result.requested_hours, 48);
+  assert.equal(result.forecast.length, 48);
+  assert.match(result.answer, /^The forecast for the next 48 hours at 37.7749, -122.4194 is valid through 2026-08-27T23:00Z, with temperatures ranging from 25C to 25C and partly cloudy conditions\./);
+  assert.match(result.answer, /No precipitation is expected\./);
+  assert.ok(!result.answer.includes('Hourly:'));
+  assert.ok(!result.answer.includes('Nearest hour'));
 });
 
 test('service honors date-window aliases and requested hourly probability fields', async () => {
