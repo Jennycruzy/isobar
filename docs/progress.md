@@ -146,8 +146,7 @@
   `b8a920df89f38245daa82e91174db4467c4941fb2e619dd98fbcb81cee116b94`.
   Rust tests pass `21/21` (`22/22` with `real_weights`), and formatting plus
   diff checks pass.
-- A temporary clone of `HEAD` with the current working diff reproduced the same
-  artifact bytes and SHA-256; the final clean-clone check remains after the
-  source is committed.
-- Registration is still intentionally paused: source changes are uncommitted,
-  so clean-clone reproduction and the final artifact handoff remain.
+- Commit `cd010b0` was rebuilt from a fresh clone and reproduced the same
+  artifact bytes and SHA-256.
+- Registration remains intentionally paused pending the final upload review
+  and the `WEATHER_CHECK`-only submission.

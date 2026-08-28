@@ -94,9 +94,9 @@ fit split measures margin `0.996578`, ordering `156/156`, self-match
 self-match `0.979960`. Repeated identical inputs are reported separately.
 The refreshed live champion bar is registration `#510` at margin
 `0.98340964` and ordering `12/12`; the candidate clears that local comparison.
-A temporary clone of `HEAD` plus the current working diff rebuilt the same
-artifact bytes and SHA-256. These local results do not replace the validator's
-three-epoch gauntlet or the final clean-clone check after committing.
+Commit `cd010b0` was rebuilt from a fresh clone with identical artifact bytes
+and SHA-256. These local results do not replace the validator's three-epoch
+gauntlet or its live evaluation.
 
 ## Epoch-271 calibration snapshot
 

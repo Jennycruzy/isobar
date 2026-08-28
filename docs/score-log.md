@@ -142,8 +142,8 @@ All three release runs passed 1,000 determinism iterations and strict
 separation against the live margin. The rebuilt WASM artifact is 1,103,845
 bytes with SHA-256
 `b8a920df89f38245daa82e91174db4467c4941fb2e619dd98fbcb81cee116b94`.
-A temporary clone of `HEAD` with the working diff rebuilt the same bytes and
-SHA-256; the final clean-clone check still belongs after committing the source.
+Commit `cd010b0` was rebuilt from a fresh clone and produced the same bytes and
+SHA-256.
 Distinct ties are zero only across this captured corpus; identical inputs must
-remain tied. The candidate is not registered yet because the source is still
-uncommitted and clean-clone reproduction is still required.
+remain tied. The candidate is not registered yet; the next step is the final
+upload review and `WEATHER_CHECK`-only submission.

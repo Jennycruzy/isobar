@@ -18,14 +18,13 @@ Last checked: 2026-08-28 01:36 UTC.
   comparison (`0.996578 > 0.98340964`). The current WASM artifact is
   1,103,845 bytes with SHA-256
   `b8a920df89f38245daa82e91174db4467c4941fb2e619dd98fbcb81cee116b94`.
-- A temporary clone of `HEAD` with the current working diff rebuilt a
-  byte-identical artifact with the same SHA-256. A true clean-clone check of
-  the final committed revision remains part of the handoff.
+- Commit `cd010b0` contains the scorer, miner regression, and documentation
+  changes. A fresh clone of that committed revision rebuilt a byte-identical
+  artifact with the same SHA-256.
 - Rust tests pass `21/21` with the production feature set and `22/22` with
   `real_weights`; formatting and `git diff --check` pass. The native host
   checks also pass. This is strong local evidence, not a registration
-  guarantee: the final source is still uncommitted, so clean-clone
-  reproduction remains outstanding and no WASM submission has been made.
+  guarantee; no WASM submission has been made.
 
 ## 2026-08-27 epoch 287 checkpoint
 
@@ -193,9 +192,9 @@ Last checked: 2026-08-28 01:36 UTC.
   higher absolute score is useful, but rank and repeatable performance matter
   more than an unverified numeric target.
 - Keep a per-epoch score log and change one scorer-facing variable at a time.
-- The captured scorer corpus now has zero distinct-input ties and the live
-  champion bar has been refreshed. Before registration, commit the final
-  scorer change, reproduce the artifact from a clean clone, and rerun the full
+- The captured scorer corpus now has zero distinct-input ties, the live
+  champion bar has been refreshed, and commit `cd010b0` reproduces cleanly.
+  Before registration, perform the final upload review and rerun the full
   pre-flight for `WEATHER_CHECK` only.
 - The current local replica favors the reference-aligned WEATHER_CHECK answer
   over the 12-word compact variant; this is a proxy result, not a live rank.
@@ -204,5 +203,5 @@ Last checked: 2026-08-28 01:36 UTC.
 - Start the Track 3 route agent under `app/` when the application window opens
   on Aug 31.
 
-This handoff is intentionally local and should be committed with the next docs
-checkpoint.
+This handoff records the committed Track 2 checkpoint; the next state change is
+the explicit `WEATHER_CHECK` upload and its validator result.
