@@ -1,0 +1,167 @@
+version: "1"
+kind: miner
+id: 20260826
+slug: isobar-weather
+protocol: generic
+name: Isobar Weather
+description: >
+  Deterministic current conditions, multi-day forecast data, and
+  forecast-derived storm-disruption risk for any global location, drawn from
+  Open-Meteo weather models. Answers include the fields needed by autonomous
+  systems with a transparent storm-risk signal when requested.
+
+base_url: https://weather.isobars.xyz
+
+auth:
+  type: none
+
+errors:
+  success_values: ["200"]
+
+rate_limit_per_sec: 5
+cache_ttl_sec: 60
+circuit_threshold: 5
+circuit_cooldown_seconds: 30
+
+endpoints:
+  - path: /weather
+    external_path: /weather
+    method: GET
+  - path: /forecast
+    external_path: /forecast
+    method: GET
+  - path: /storm
+    external_path: /storm
+    method: GET
+
+input_schema:
+  type: object
+  properties:
+    q:
+      type: string
+      description: Location name such as a city, region, country, or place to geocode.
+    days:
+      type: integer
+      description: Number of forecast days from 1 to 7; defaults to 3.
+    hours:
+      type: integer
+      description: Storm or hourly forecast horizon from 1 to 168 hours; defaults to 48 for storm requests.
+  required:
+    - q
+
+output_schema:
+  type: object
+  properties:
+    answer:
+      type: string
+      description: Human-readable weather or storm-risk answer in prose.
+    location:
+      type: object
+      description: Resolved name, region, country, coordinates, and timezone.
+    daily:
+      type: object
+      description: Daily forecast values for forecast requests.
+    daily_units:
+      type: object
+      description: Units for the daily forecast values.
+    storm:
+      type: object
+      description: Forecast-derived wind, gust, precipitation, thunderstorm, and disruption-risk data.
+    source:
+      type: string
+      description: Upstream weather data source identifier.
+    retrieved_at:
+      type: string
+      description: UTC timestamp when the response was retrieved.
+    current:
+      type: object
+      description: Current weather measurements for current-condition requests.
+  required:
+    - answer
+    - source
+    - retrieved_at
+
+semantics:
+  signal_mapping:
+    label_field: answer
+  supported_intents:
+    - WEATHER_CHECK
+    - WEATHER_FORECAST
+    - STORM_ALERT
+
+on_chain:
+  description: >
+    Stores deterministic weather and forecast-derived storm-risk answer text
+    and resolved location metadata for on-chain verification and request replay.
+  transform: direct
+  min_price_usdc: 0.01
+  fields:
+    strings:
+      - index: 0
+        name: answer
+        description: Complete human-readable weather answer returned to callers.
+        source_path: answer
+      - index: 1
+        name: location_name
+        description: Resolved city or location name.
+        source_path: location.name
+      - index: 2
+        name: location_admin1
+        description: Resolved administrative region or state.
+        source_path: location.admin1
+      - index: 3
+        name: location_country
+        description: Resolved country name.
+        source_path: location.country
+      - index: 4
+        name: location_timezone
+        description: IANA timezone for the resolved location.
+        source_path: location.timezone
+      - index: 5
+        name: daily_units_temperature_2m_max
+        description: Unit for daily maximum temperature.
+        source_path: daily_units.temperature_2m_max
+      - index: 6
+        name: daily_units_temperature_2m_min
+        description: Unit for daily minimum temperature.
+        source_path: daily_units.temperature_2m_min
+      - index: 7
+        name: daily_units_precipitation_sum
+        description: Unit for daily precipitation total.
+        source_path: daily_units.precipitation_sum
+      - index: 8
+        name: daily_units_precipitation_probability_max
+        description: Unit for maximum daily precipitation probability.
+        source_path: daily_units.precipitation_probability_max
+      - index: 9
+        name: daily_units_wind_speed_10m_max
+        description: Unit for maximum daily wind speed.
+        source_path: daily_units.wind_speed_10m_max
+      - index: 10
+        name: source
+        description: Upstream data source identifier.
+        source_path: source
+      - index: 11
+        name: retrieved_at
+        description: UTC timestamp when the weather data was retrieved.
+        source_path: retrieved_at
+    integers:
+      - index: 0
+        name: location_latitude
+        description: Resolved latitude in degrees, scaled by 10000.
+        source_path: location.latitude
+        multiplier: 10000
+      - index: 1
+        name: location_longitude
+        description: Resolved longitude in degrees, scaled by 10000.
+        source_path: location.longitude
+        multiplier: 10000
+  request:
+    - endpoint: forecast
+      method: GET
+      query_params:
+        q: { source: strings.1 }
+    - endpoint: weather
+      method: GET
+      query_params:
+        q: { source: strings.1 }
