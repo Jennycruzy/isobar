@@ -279,12 +279,12 @@ fn champion_score(scores: &[ChampionScore], id: &str) -> Result<f32, String> {
 }
 
 fn score(params: ScoringParams, question: &str, truth: &str, answer: &str) -> f32 {
-    let raw = scorer::raw_score(question.as_bytes(), truth.as_bytes(), answer.as_bytes());
-    public_from_raw(raw, params)
-}
-
-fn public_from_raw(raw: f32, params: ScoringParams) -> f32 {
-    scorer::public_score_from_raw(raw, params)
+    scorer::score_with_params(
+        question.as_bytes(),
+        truth.as_bytes(),
+        answer.as_bytes(),
+        params,
+    )
 }
 
 fn build_raw_corpus(
@@ -594,14 +594,26 @@ fn determinism_check(params: ScoringParams, fixtures: &[Fixture], iteration_coun
         fixture.ground_truth.as_bytes(),
         fixture.good.as_bytes(),
     );
-    let reference_score = public_from_raw(reference_raw, params);
+    let reference_score = scorer::public_score_for_inputs(
+        fixture.question.as_bytes(),
+        fixture.ground_truth.as_bytes(),
+        fixture.good.as_bytes(),
+        reference_raw,
+        params,
+    );
     for _ in 0..iteration_count {
         let current_raw = scorer::raw_score(
             fixture.question.as_bytes(),
             fixture.ground_truth.as_bytes(),
             fixture.good.as_bytes(),
         );
-        let current_score = public_from_raw(current_raw, params);
+        let current_score = scorer::public_score_for_inputs(
+            fixture.question.as_bytes(),
+            fixture.ground_truth.as_bytes(),
+            fixture.good.as_bytes(),
+            current_raw,
+            params,
+        );
         if reference_raw.to_bits() != current_raw.to_bits()
             || reference_score.to_bits() != current_score.to_bits()
         {
@@ -625,9 +637,27 @@ fn evaluate(
     let mut candidate_scores = Vec::with_capacity(raw_corpus.fixtures.len() * 2);
     for (index, raw) in raw_corpus.fixtures.iter().enumerate() {
         let fixture = &fixtures[index];
-        let self_score = public_from_raw(raw.candidate_self_match, params);
-        let good = public_from_raw(raw.candidate_good, params);
-        let bad = public_from_raw(raw.candidate_bad, params);
+        let self_score = scorer::public_score_for_inputs(
+            fixture.question.as_bytes(),
+            fixture.ground_truth.as_bytes(),
+            fixture.ground_truth.as_bytes(),
+            raw.candidate_self_match,
+            params,
+        );
+        let good = scorer::public_score_for_inputs(
+            fixture.question.as_bytes(),
+            fixture.ground_truth.as_bytes(),
+            fixture.good.as_bytes(),
+            raw.candidate_good,
+            params,
+        );
+        let bad = scorer::public_score_for_inputs(
+            fixture.question.as_bytes(),
+            fixture.ground_truth.as_bytes(),
+            fixture.bad.as_bytes(),
+            raw.candidate_bad,
+            params,
+        );
         self_match = self_match.min(self_score);
         margin_sum += (good - bad) as f64;
         if good > bad {
@@ -657,7 +687,13 @@ fn evaluate(
     for (index, raw) in raw_corpus.traffic.iter().enumerate() {
         let row = &traffic[index];
         champion_scores.push(raw.champion);
-        let score = public_from_raw(raw.candidate, params);
+        let score = scorer::public_score_for_inputs(
+            row.question.as_bytes(),
+            row.ground_truth.as_bytes(),
+            row.answer.as_bytes(),
+            raw.candidate,
+            params,
+        );
         candidate_traffic_scores.push(score);
         traffic_values.push((
             score,

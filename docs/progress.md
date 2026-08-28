@@ -91,3 +91,63 @@
 - This is a single forecast-format variable. Epoch 286 still reports the
   pre-deployment Isobar forecast row at `#2/11`; wait for the next Explorer
   measurement before accepting or reverting it.
+
+## 2026-08-27 — epoch 287 checkpoint and Track 2 tie investigation
+
+- Explorer has advanced to epoch 287. Registration `#224` is active and the
+  public health check remains HTTP 200 with `upstream_ok: true`.
+- Isobar is currently `#1/9` for WEATHER_CHECK at `0.29039782`, scored at
+  `2026-08-27T18:41:50.672985Z`. Epoch-287 WEATHER_FORECAST has no scored rows
+  yet. The exact live record is captured in [`GROUND_TRUTH.md`](GROUND_TRUTH.md).
+- The first uncommitted scorer experiment in `src/scorer/src/weather.rs` ignored
+  numeric tokens in context keys and made typed-fact adjustments penalty-only.
+  Its fresh fit/holdout/traffic run reported margins
+  `0.939341`/`0.938561`/`0.994781`, agreement `0.709362`, and non-zero ties;
+  those measurements are superseded by the tie-resolution checkpoint below.
+- Track 2 was not registered during this checkpoint. The remaining release
+  work is recorded below: clean-clone reproducibility and refreshed live
+  champion calibration before a WEATHER_CHECK-only submission.
+
+## 2026-08-27 — Track 2 tie-resolution checkpoint (superseded by the 2026-08-28 refresh)
+
+- The scorer's exported rank path now includes the same weather typed-fact
+  adjustment used by `breakdown_answer` and the native harness.
+- Numeric context keys exclude nearby figures, and typed-fact adjustments are
+  penalty-only. A deterministic FNV-1a/splitmix secondary key resolves zero,
+  ordinary, and saturated six-decimal score bands without time, randomness,
+  I/O, or unordered collections.
+- Release pre-flight on the captured WEATHER_CHECK data reports zero
+  distinct-input ties: fit `156/156` ordering and `0.939391` margin, holdout
+  `43/44` and `0.938643`, and the 200-row corpus `200/200` and `0.994568`.
+  Rank agreement is `0.721230` and all three runs pass 1,000 determinism
+  iterations. Repeated identical inputs remain tied intentionally.
+- Native Rust tests pass `18/18` for the production feature set and `19/19`
+  with `real_weights`. The default release WASM passes 1,000
+  repeated calls in both wazero compiler and interpreter runtimes. Artifact
+  size is 1,101,744 bytes; SHA-256 is
+  `56e2c01d4977be77601b168e7de82996cb5fa51262d8912ac6efc5674f2798c5`.
+- Track 2 remained unregistered at this checkpoint. The live champion bar was
+  refreshed in the next checkpoint; the remaining steps are to commit the
+  final source, reproduce the artifact from a clean clone, and only then submit
+  one intent.
+
+## 2026-08-28 — Track 2 live-bar refresh
+
+- Refreshed the live WASM list: registration `#510` remains the active
+  WEATHER_CHECK champion at margin `0.98340964`, ordering `12/12`, with
+  Spearman agreement `0.6128585`.
+- Against that live bar, the current candidate measures fit margin `0.996578`
+  with ordering `156/156`, holdout margin `0.984067` with ordering `44/44`,
+  and 200-row traffic margin `0.996181` with ordering `200/200`.
+- Agreement is `0.701480`; distinct-input ties are zero in all three datasets,
+  while repeated identical inputs remain tied by design. Each run passed 1,000
+  determinism iterations.
+- The release artifact is 1,103,845 bytes with SHA-256
+  `b8a920df89f38245daa82e91174db4467c4941fb2e619dd98fbcb81cee116b94`.
+  Rust tests pass `21/21` (`22/22` with `real_weights`), and formatting plus
+  diff checks pass.
+- A temporary clone of `HEAD` with the current working diff reproduced the same
+  artifact bytes and SHA-256; the final clean-clone check remains after the
+  source is committed.
+- Registration is still intentionally paused: source changes are uncommitted,
+  so clean-clone reproduction and the final artifact handoff remain.

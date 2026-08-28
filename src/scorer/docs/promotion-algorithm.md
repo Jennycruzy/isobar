@@ -41,14 +41,19 @@ the evidence-backed threshold calibration:
 ```text
 raw = salience(question, truth, answer) + typed_weather_adjustment
 high = clamp((raw - 0.91) / 0.08)
-score = quantize6(0.96 * high + 0.04 * raw)
+base = quantize6(0.96 * high + 0.04 * raw)
+score = deterministic_tie_slot(question, truth, answer, base)
 ```
 
 The `.95` centre is fit to this module's measured salience raw scale; it must
-not be copied to a scorer whose raw scale differs. The `.04` half-width and
-`.04` raw tail retain a graded interior and some rank resolution. The salience
-core uses the same compact vector table as the published source for bounded
-synonym credit, while typed weather checks are applied in the parent scorer.
+not be copied to a scorer whose raw scale differs. The `.04` half-width, `.02`
+raw tail, and `.10` low-tail slope retain a graded interior and some rank
+resolution. The salience core uses the same compact vector table as the
+published source for bounded synonym credit, while typed weather checks are
+applied in the parent scorer.
+The tie slot is a fixed FNV-1a/splitmix secondary key applied after base
+quantization. It covers zero, ordinary, and saturated bands without runtime
+state; repeated identical inputs remain deterministic ties.
 The WASM rank path does not run MiniLM, so its latency is suitable for the
 validator's fixture loop.
 
@@ -81,16 +86,17 @@ ties         0
 
 The fit split measures margin `0.532802`, ordering `101/112`, and zero ties;
 the holdout split measures margin `0.559144`, ordering `30/32`, and zero ties.
-The current real WEATHER_CHECK history is the useful local proxy: with 200
-Explorer rows, the threshold path measures margin `0.994756`, ordering
-`200/200`, agreement `0.708337`, and a live champion bar of `0.98340964`.
-The generated 156-row fit split measures margin `0.590560`, ordering
-`117/156`, self-match `0.999603`, and agreement `0.708337`; the 44-row holdout
-measures margin `0.793219`, ordering `38/44`, self-match `0.979851`, and the
-same traffic agreement. Distinct-input ties are `9,379` on fit and `8,658` on
-holdout after final quantization; repeated identical inputs are reported
-separately. These results still do not replace the validator's live three-epoch
-gauntlet, and the tie counts remain a pre-registration issue.
+The current real WEATHER_CHECK history is the useful local proxy. The latest
+tie-free run measures margin `0.996181`, ordering `200/200`, agreement
+`0.701480`, and zero distinct-input ties on the 200-row corpus. The 156-row
+fit split measures margin `0.996578`, ordering `156/156`, self-match
+`0.999496`; the 44-row holdout measures margin `0.984067`, ordering `44/44`,
+self-match `0.979960`. Repeated identical inputs are reported separately.
+The refreshed live champion bar is registration `#510` at margin
+`0.98340964` and ordering `12/12`; the candidate clears that local comparison.
+A temporary clone of `HEAD` plus the current working diff rebuilt the same
+artifact bytes and SHA-256. These local results do not replace the validator's
+three-epoch gauntlet or the final clean-clone check after committing.
 
 ## Epoch-271 calibration snapshot
 

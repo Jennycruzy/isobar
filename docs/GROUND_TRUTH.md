@@ -233,3 +233,52 @@ converted with [`extract_weather_corpus.py`](../src/scorer/tools/extract_weather
 into a reproducible corpus and the Explorer `score` field was used as the
 independent champion vector. This is separate from the 10-row epoch-284 sample
 above and is the evidence behind the scorer's current local calibration.
+
+## Epoch 287 live capture
+
+Captured on 2026-08-27 after the epoch boundary. `/api/epoch` reported:
+
+```json
+{"current_epoch":287,"epoch_duration":"9h0m0s","epoch_duration_seconds":32400,"next_epoch_at":"2026-08-28T03:36:55Z","settlement_epoch":287}
+```
+
+Registration `#224` remained active and the public `/health` endpoint returned
+HTTP 200 with `upstream_ok: true`.
+
+### WEATHER_CHECK
+
+Question, verbatim:
+
+```text
+For a miner processing atmospheric data, provide a natural query requesting the current temperature and 'feels like' temperature in Tokyo, Japan, along with the probability of precipitation for the next 24 forecast hours, using the city's coordinates (35.6895°N, 139.6917°E) as input.
+```
+
+Ground truth, verbatim:
+
+```text
+Here is a natural query for a miner processing atmospheric data requesting the current temperature and 'feels like' temperature in Tokyo, Japan, along with the probability of precipitation for the next 24 forecast hours using the city's coordinates (35.6895°N, 139.6917°E) as input:
+
+"Using coordinates 35.6895°N, 139.6917°E, provide the current temperature and 'feels like' temperature in Tokyo, Japan, along with the probability of precipitation for the next 24 forecast hours."
+```
+
+Converted reference text recorded with the row:
+
+```text
+The current weather in the specified location is characterized by light drizzle, with a temperature of 22.8°C and a perceived temperature of 27.4°C. Over the next 24 hours, temperatures will range from 22.7°C to 31.6°C, with a 60% to 83% chance of rain or showers.
+```
+
+The `miner_answer` payload begins:
+
+```json
+{"answer":"The current temperature in 35.6895, 139.6917 is 22.8C, and it feels like 27.4C. Over the next 24 hours, temperatures range from 23C to 32C, with a chance of rain or showers, and precipitation chances ranging from 60% to 83%. As of 2026-08-27T18:30Z.", ...}
+```
+
+Explorer result: Isobar `#1/9`, score `0.29039782`, scored at
+`2026-08-27T18:41:50.672985Z`. The next rows were `openweathermap`
+(`0.014834604`), `weatherapi` (`0.014801264`), and
+`verity-current-weather` (`0.014577433`).
+
+### WEATHER_FORECAST
+
+The epoch-287 Explorer query returned `total: 0`; no WEATHER_FORECAST miner
+answer has been scored yet for this epoch.

@@ -151,6 +151,18 @@ mod tests {
     }
 
     #[test]
+    fn quantized_tie_break_is_stable_and_bounded() {
+        let params = scorer::ScoringParams::default();
+        let first = scorer::public_score_for_inputs(b"q0", b"gt", b"a0", 0.77, params);
+        let repeated = scorer::public_score_for_inputs(b"q0", b"gt", b"a0", 0.77, params);
+        let second = scorer::public_score_for_inputs(b"q1", b"gt", b"a1", 0.77, params);
+        assert_eq!(first, repeated);
+        assert_ne!(first, second);
+        assert!((0.0..=1.0).contains(&first));
+        assert!((0.0..=1.0).contains(&second));
+    }
+
+    #[test]
     fn exported_abi_returns_breakdown_with_raw_score() {
         let question = b"What is the answer?";
         let truth = b"The answer is deterministic.";

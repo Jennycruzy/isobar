@@ -161,6 +161,45 @@ fn has_any_word(bytes: &[u8], words: &[&[u8]]) -> bool {
     false
 }
 
+fn count_word(bytes: &[u8], needle: &[u8]) -> u8 {
+    if needle.is_empty() || bytes.len() < needle.len() {
+        return 0;
+    }
+    let mut count = 0u8;
+    let mut start = 0;
+    while start + needle.len() <= bytes.len() {
+        let mut equal = true;
+        let mut index = 0;
+        while index < needle.len() {
+            if lower(bytes[start + index]) != lower(needle[index]) {
+                equal = false;
+                break;
+            }
+            index += 1;
+        }
+        if equal {
+            let before_ok = start == 0 || !is_word(bytes[start - 1]);
+            let after = start + needle.len();
+            let after_ok = after == bytes.len() || !is_word(bytes[after]);
+            if before_ok && after_ok {
+                count = count.saturating_add(1);
+            }
+        }
+        start += 1;
+    }
+    count
+}
+
+fn count_any_word(bytes: &[u8], words: &[&[u8]]) -> u8 {
+    let mut count = 0u8;
+    let mut index = 0;
+    while index < words.len() {
+        count = count.saturating_add(count_word(bytes, words[index]));
+        index += 1;
+    }
+    count
+}
+
 fn window(bytes: &[u8], start: usize, end: usize) -> (usize, usize) {
     let left = start.saturating_sub(56);
     let right = core::cmp::min(bytes.len(), end.saturating_add(40));
@@ -249,6 +288,11 @@ fn token_hash(bytes: &[u8], start: usize, end: usize) -> u32 {
     hash
 }
 
+#[inline]
+fn is_context_char(byte: u8) -> bool {
+    byte.is_ascii_alphabetic() || byte == b'_'
+}
+
 /// Extract at most two non-stopword tokens before a number and one after it.
 /// The fixed token hashes are the context key used by the pairing pass; they
 /// avoid positional guesses when a response contains several temperatures.
@@ -258,11 +302,11 @@ fn context_key(bytes: &[u8], number_start: usize, number_end: usize) -> ([u32; C
     let left = number_start.saturating_sub(56);
     let mut index = left;
     while index < number_start {
-        while index < number_start && !is_word(bytes[index]) {
+        while index < number_start && !is_context_char(bytes[index]) {
             index += 1;
         }
         let token_start = index;
-        while index < number_start && is_word(bytes[index]) {
+        while index < number_start && is_context_char(bytes[index]) {
             index += 1;
         }
         if token_start < index {
@@ -280,11 +324,11 @@ fn context_key(bytes: &[u8], number_start: usize, number_end: usize) -> ([u32; C
     }
     index = number_end;
     let right = core::cmp::min(bytes.len(), number_end.saturating_add(40));
-    while index < right && !is_word(bytes[index]) {
+    while index < right && !is_context_char(bytes[index]) {
         index += 1;
     }
     let token_start = index;
-    while index < right && is_word(bytes[index]) {
+    while index < right && is_context_char(bytes[index]) {
         index += 1;
     }
     if token_start < index {
@@ -410,6 +454,58 @@ fn first_timestamp(bytes: &[u8]) -> Option<i64> {
             }
         }
         index += 1;
+    }
+    None
+}
+
+fn coordinate_pair(bytes: &[u8]) -> Option<(f32, f32)> {
+    let coordinate_words = [
+        b"coordinate".as_slice(),
+        b"coordinates".as_slice(),
+        b"latitude".as_slice(),
+        b"longitude".as_slice(),
+        b"lat".as_slice(),
+        b"lon".as_slice(),
+    ];
+    let mut index = 0;
+    while index < bytes.len() {
+        let starts_number = is_digit(bytes[index])
+            || ((bytes[index] == b'-' || bytes[index] == b'+')
+                && index + 1 < bytes.len()
+                && (is_digit(bytes[index + 1]) || bytes[index + 1] == b'.'))
+            || (bytes[index] == b'.' && index + 1 < bytes.len() && is_digit(bytes[index + 1]));
+        if !starts_number {
+            index += 1;
+            continue;
+        }
+        let number_start = index;
+        let Some((number_end, latitude)) = parse_number(bytes, index) else {
+            index += 1;
+            continue;
+        };
+        if !(-90.0..=90.0).contains(&latitude)
+            || !has_any_word(
+                &bytes[number_start.saturating_sub(64)..number_start],
+                &coordinate_words,
+            )
+        {
+            index = number_end;
+            continue;
+        }
+        let mut separator = skip_space(bytes, number_end);
+        if separator >= bytes.len() || (bytes[separator] != b',' && bytes[separator] != b';') {
+            index = number_end;
+            continue;
+        }
+        separator = skip_space(bytes, separator + 1);
+        let Some((longitude_end, longitude)) = parse_number(bytes, separator) else {
+            index = number_end;
+            continue;
+        };
+        if (-180.0..=180.0).contains(&longitude) {
+            return Some((latitude, longitude));
+        }
+        index = longitude_end;
     }
     None
 }
@@ -677,17 +773,21 @@ fn weather_signal(bytes: &[u8]) -> bool {
     )
 }
 
-fn condition_polarity(bytes: &[u8]) -> u8 {
-    if has_any_word(
+fn condition_counts(bytes: &[u8]) -> (u8, u8, u8) {
+    let precipitation = count_any_word(
         bytes,
         &[
             b"rain",
+            b"rains",
             b"rainy",
             b"drizzle",
+            b"drizzles",
             b"shower",
+            b"showers",
             b"snow",
             b"hail",
             b"thunderstorm",
+            b"thunderstorms",
             b"light_drizzle",
             b"moderate_drizzle",
             b"dense_drizzle",
@@ -710,25 +810,63 @@ fn condition_polarity(bytes: &[u8]) -> u8 {
             b"thunderstorm_with_slight_hail",
             b"thunderstorm_with_heavy_hail",
         ],
-    ) {
-        2
-    } else if has_any_word(bytes, &[b"clear", b"mainly_clear", b"sunny", b"sunshine"]) {
-        1
-    } else if has_any_word(
+    );
+    let clear = count_any_word(bytes, &[b"clear", b"mainly_clear", b"sunny", b"sunshine"]);
+    let cloudy = count_any_word(
         bytes,
         &[
             b"overcast",
             b"cloudy",
             b"cloud",
+            b"clouds",
             b"partly_cloudy",
             b"fog",
             b"mist",
             b"depositing_rime_fog",
         ],
-    ) {
+    );
+    (precipitation, clear, cloudy)
+}
+
+fn condition_polarity(bytes: &[u8]) -> u8 {
+    let (precipitation, clear, cloudy) = condition_counts(bytes);
+    if precipitation > 0 {
+        2
+    } else if clear > 0 {
+        1
+    } else if cloudy > 0 {
         3
     } else {
         0
+    }
+}
+
+fn condition_substitution_penalty(reference: &[u8], candidate: &[u8], strict: bool) -> f32 {
+    if !strict {
+        return 0.0;
+    }
+    let (reference_precipitation, reference_clear, _) = condition_counts(reference);
+    let (candidate_precipitation, candidate_clear, _) = condition_counts(candidate);
+    let precipitation_replaced_by_clear =
+        reference_precipitation > candidate_precipitation && candidate_clear > reference_clear;
+    let clear_replaced_by_precipitation =
+        reference_clear > candidate_clear && candidate_precipitation > reference_precipitation;
+    if precipitation_replaced_by_clear || clear_replaced_by_precipitation {
+        -0.18
+    } else {
+        0.0
+    }
+}
+
+fn coordinate_penalty(reference: &[u8], candidate: &[u8]) -> f32 {
+    match (coordinate_pair(reference), coordinate_pair(candidate)) {
+        (Some((reference_lat, reference_lon)), Some((candidate_lat, candidate_lon)))
+            if (reference_lat - candidate_lat).abs() > 0.2
+                || (reference_lon - candidate_lon).abs() > 0.2 =>
+        {
+            -0.30
+        }
+        _ => 0.0,
     }
 }
 
@@ -817,23 +955,23 @@ fn score_fact(reference: Fact, candidate: Fact) -> f32 {
     match reference.kind {
         KIND_TEMPERATURE => {
             if difference <= 0.5 {
-                0.025
-            } else if difference <= 2.0 {
                 0.0
+            } else if difference <= 2.0 {
+                -0.01
             } else {
                 -0.08
             }
         }
         KIND_HUMIDITY | KIND_CLOUD => {
             if difference <= 5.0 {
-                0.018
+                0.0
             } else {
                 -0.06
             }
         }
         KIND_PROBABILITY => {
             if difference <= 10.0 {
-                0.008
+                0.0
             } else {
                 -0.03
             }
@@ -845,28 +983,28 @@ fn score_fact(reference: Fact, candidate: Fact) -> f32 {
             {
                 -0.08
             } else if difference <= 2.0 {
-                0.012
+                0.0
             } else {
                 -0.035
             }
         }
         KIND_WIND_DIRECTION => {
             if difference <= 22.5 {
-                0.012
+                0.0
             } else {
                 -0.05
             }
         }
         KIND_PRECIPITATION => {
             if difference <= 1.0 {
-                0.012
+                0.0
             } else {
                 -0.035
             }
         }
         KIND_PRESSURE => {
             if difference <= 5.0 {
-                0.008
+                0.0
             } else {
                 -0.018
             }
@@ -1150,6 +1288,7 @@ pub fn adjustment(question: &[u8], reference: &[u8], candidate: &[u8]) -> f32 {
     }
     let reference_polarity = condition_polarity(reference);
     let candidate_polarity = condition_polarity(candidate);
+    adjustment += condition_substitution_penalty(reference, candidate, strict);
     if reference_polarity != 0
         && candidate_polarity != 0
         && reference_polarity != candidate_polarity
@@ -1169,6 +1308,7 @@ pub fn adjustment(question: &[u8], reference: &[u8], candidate: &[u8]) -> f32 {
     } else {
         location
     };
+    adjustment += coordinate_penalty(reference, candidate);
     if !adjustment.is_finite() {
         return 0.0;
     }
@@ -1254,5 +1394,41 @@ mod tests {
             ),
             0.0
         );
+    }
+
+    #[test]
+    fn numeric_context_ignores_other_figures_and_penalizes_mutation() {
+        let reference =
+            b"The current temperature in Tokyo is approximately **84\xC2\xB0F (29\xC2\xB0C)** with a \"feels like\" temperature of **93\xC2\xB0F (34\xC2\xB0C)**.";
+        let candidate =
+            b"The current temperature in Tokyo is approximately **94\xC2\xB0F (29\xC2\xB0C)** with a \"feels like\" temperature of **93\xC2\xB0F (34\xC2\xB0C)**.";
+        assert!(
+            adjustment(b"weather in Tokyo", reference, candidate) < -0.1,
+            "digit mutation was not penalized strongly enough"
+        );
+    }
+
+    #[test]
+    fn plural_condition_substitution_is_penalized() {
+        let reference = b"Tokyo forecast: 30C, mostly sunny today, with a slight chance of thunderstorms later.";
+        let candidate =
+            b"Tokyo forecast: 30C, mostly sunny today, with a slight chance of clear later.";
+        assert!(adjustment(b"weather in Tokyo", reference, candidate) < -0.1);
+    }
+
+    #[test]
+    fn long_condition_substitution_is_penalized() {
+        let reference = b"The current temperature in Tokyo, Japan is 88\xC2\xB0F, and it feels like 99\xC2\xB0F due to humidity and other factors. The forecast for the next 24 hours shows partly to mostly cloudy conditions with scattered showers and thunderstorms developing this afternoon, with a high of 89\xC2\xB0F and a low of 76\xC2\xB0F. There is a 40% chance of rain today, and tomorrow will be mostly cloudy with a high of 89\xC2\xB0F and a low of 75\xC2\xB0F.";
+        let candidate = b"The current temperature in Tokyo, Japan is 88\xC2\xB0F, and it feels like 99\xC2\xB0F due to humidity and other factors. The forecast for the next 24 hours shows partly to mostly cloudy conditions with scattered clear and thunderstorms developing this afternoon, with a high of 89\xC2\xB0F and a low of 76\xC2\xB0F. There is a 40% chance of rain today, and tomorrow will be mostly cloudy with a high of 89\xC2\xB0F and a low of 75\xC2\xB0F.";
+        assert!(adjustment(b"weather in Tokyo", reference, candidate) < -0.1);
+    }
+
+    #[test]
+    fn explicit_coordinate_mutation_is_penalized() {
+        let reference =
+            b"The current weather in Tokyo, Japan (coordinates approximately 35.6897, 139.6922) is partly cloudy.";
+        let candidate =
+            b"The current weather in Tokyo, Japan (coordinates approximately 45.7000, 139.6922) is partly cloudy.";
+        assert!(adjustment(b"weather in Tokyo", reference, candidate) < -0.2);
     }
 }

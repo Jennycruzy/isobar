@@ -216,3 +216,28 @@ test('service honors date-window aliases and requested hourly probability fields
   assert.equal(urls[1].searchParams.get('hourly'), 'temperature_2m,dew_point_2m,precipitation,precipitation_probability,weather_code,wind_speed_10m');
   assert.equal(result.daily.time.length, 7);
 });
+
+test('multi-day protocol forecasts use the complete hourly answer shape without an interval flag', async () => {
+  const sevenDay = {
+    ...daily,
+    daily: {
+      ...daily.daily,
+      time: ['2026-09-03', '2026-09-04', '2026-09-05', '2026-09-06', '2026-09-07', '2026-09-08', '2026-09-09'],
+      weather_code: [1, 2, 3, 61, 63, 2, 0],
+      temperature_2m_max: [30, 31, 29, 28, 27, 30, 31],
+      temperature_2m_min: [23, 24, 22, 21, 20, 22, 23],
+      precipitation_probability_max: [10, 20, 40, 60, 70, 30, 5],
+      wind_speed_10m_max: [1.2, 1.4, 1.8, 2.1, 2.4, 1.5, 1.1]
+    }
+  };
+  const service = (await import('../src/weather.js')).createWeatherService({
+    now: () => new Date('2026-08-27T00:00:00Z'), logger: { info() {} },
+    fetchImpl: async (url) => url.toString().includes('geocoding')
+      ? { ok: true, json: async () => ({ results: [location] }) }
+      : { ok: true, json: async () => sevenDay }
+  });
+  const result = await service.query('forecast', { city: 'Tokyo', days: 7 }, AbortSignal.timeout(1000));
+  assert.match(result.answer, /^2026-09-03: Mainly clear, 23-30 C, precipitation up to 10%, wind up to 4.3 km\/h; 2026-09-04: Partly cloudy/);
+  assert.match(result.answer, /Hourly: 2026-08-26T00:00 Rain, temp 28.5 C, dew point 22.1 C, precipitation 0%\/2.4 mm, wind 18.4 km\/h/);
+  assert.ok(!result.answer.includes('Nearest hour'));
+});

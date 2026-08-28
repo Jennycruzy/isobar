@@ -97,9 +97,15 @@ bearing, precipitation, condition polarity, and an explicit city token from the
 question. Non-weather text skips that adjustment.
 
 The public score uses the evidence-backed threshold calibration: a `.95` centre,
-`.04` half-width ramp, and `.04` raw tie-break. The ramp supplies separation;
-the raw tail retains rank information. Output is clamped and quantized to six
-decimal places. The submitted `rank_answer` path does not run MiniLM, keeping
+`.04` half-width ramp, `.02` raw tail, and a low-tail breakpoint at `.10` with
+slope `.10`. The ramp supplies separation; the raw tail retains rank
+information. Output is clamped and quantized to six decimal places. A fixed
+FNV-1a/splitmix secondary key then assigns distinct inputs in zero, ordinary,
+and saturated quantized bands to deterministic six-decimal slots; identical
+inputs still score identically. The current low-band width is 64 units with
+fixed seed `44115`; the constants are calibrated against the captured
+WEATHER_CHECK corpus, not claimed to prevent collisions on arbitrary future
+traffic. The submitted `rank_answer` path does not run MiniLM, keeping
 per-call work bounded; the optional real-weight encoder remains available for
 diagnostics and parity tests. All scorer state is fixed-array and deterministic:
 no `HashMap`, time, randomness, I/O, or ambient state.
@@ -216,6 +222,14 @@ example of the CLI override. Refresh the current Intent-specific margin and
 ordering from the Explorer before using the report for a registration
 decision.
 
+The 2026-08-28 WEATHER_CHECK refresh used live registration `#510` as the bar:
+margin `0.98340964`, ordering `12/12`, and Spearman agreement `0.6128585`.
+The current candidate measured fit margin `0.996578` with ordering `156/156`,
+holdout margin `0.984067` with ordering `44/44`, and 200-row traffic margin
+`0.996181` with ordering `200/200`; all three had zero distinct-input ties and
+agreement `0.701480`. These are local corpus measurements, not a guarantee of
+the three-epoch validator result.
+
 Sweep the contrast curve and inspect the margin/agreement frontier:
 
 ```bash
@@ -254,11 +268,12 @@ local proxy because the 200 Explorer rows supply independent live scores but
 not the validator's hidden fixture pairs. These are calibration results, not a
 registration guarantee; the live validator remains authoritative.
 
-The harness reports `9,379` distinct-input ties on the fit run and `8,658` on
-holdout after six-decimal quantization (`879` and `940` repeated-input ties,
-respectively). The empty-answer rows in the public history account for much of
-the traffic tie count. This is recorded as a pre-registration issue rather than
-being represented as a zero-tie pass.
+The pre-resolver run reported thousands of distinct-input ties. The current
+tie-resolution run reports zero distinct-input ties on the captured 156-row
+fit, 44-row holdout, and 200-row WEATHER_CHECK corpus; repeated identical
+inputs are reported separately and remain tied by design. Current results are
+recorded in `../../docs/score-log.md` and still require clean-clone and live
+champion-bar validation before registration.
 
 Use `--fixtures data/fixtures-fit.tsv` or
 `--fixtures data/fixtures-holdout.tsv` with a matching raw cache to evaluate

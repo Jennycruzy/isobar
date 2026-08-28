@@ -1,6 +1,74 @@
 # Handoff
 
-Last checked: 2026-08-27 14:31 UTC.
+Last checked: 2026-08-28 01:36 UTC.
+
+## 2026-08-28 Track 2 live-bar refresh
+
+- The live `/api/wasm?limit=500` response contains 1,430 registrations. The
+  active `WEATHER_CHECK` champion is registration `#510`, with eval score and
+  champion margin `0.98340964`, ordering `12/12`, worst self-match
+  `0.99863017`, and Spearman agreement `0.6128585`.
+- Re-running the release harness against the captured 200-row Explorer corpus
+  and the exact live bar produced zero distinct-input ties in every split:
+  fit margin `0.996578`, ordering `156/156`; holdout margin `0.984067`,
+  ordering `44/44`; full corpus margin `0.996181`, ordering `200/200`.
+  Agreement is `0.701480`; repeated identical inputs remain intentionally
+  tied (`879`, `940`, and `1434` respectively).
+- All three runs passed 1,000 determinism iterations and the live-bar
+  comparison (`0.996578 > 0.98340964`). The current WASM artifact is
+  1,103,845 bytes with SHA-256
+  `b8a920df89f38245daa82e91174db4467c4941fb2e619dd98fbcb81cee116b94`.
+- A temporary clone of `HEAD` with the current working diff rebuilt a
+  byte-identical artifact with the same SHA-256. A true clean-clone check of
+  the final committed revision remains part of the handoff.
+- Rust tests pass `21/21` with the production feature set and `22/22` with
+  `real_weights`; formatting and `git diff --check` pass. The native host
+  checks also pass. This is strong local evidence, not a registration
+  guarantee: the final source is still uncommitted, so clean-clone
+  reproduction remains outstanding and no WASM submission has been made.
+
+## 2026-08-27 epoch 287 checkpoint
+
+- Explorer now reports `current_epoch: 287`, with the next boundary at
+  `2026-08-28T03:36:55Z`.
+- Registration `#224` remains active. The public `/health` endpoint is HTTP
+  200 with `upstream_ok: true`; no service restart issue was observed.
+- Isobar `WEATHER_CHECK` is currently `#1/9` at `0.29039782`, scored at
+  `2026-08-27T18:41:50.672985Z`. The next rows are `openweathermap`
+  (`0.014834604`), `weatherapi` (`0.014801264`), and
+  `verity-current-weather` (`0.014577433`).
+- Epoch-287 `WEATHER_FORECAST` has no scored rows yet (`total: 0`).
+- The exact epoch-287 question, ground truth, converted reference, and Isobar
+  answer prefix are captured in [`GROUND_TRUTH.md`](GROUND_TRUTH.md).
+- Track 2 is still unregistered. The working tree now contains the scorer
+  parity, typed-fact, and deterministic tie-resolution changes. Fresh fit,
+  holdout, and corpus runs report zero distinct-input ties; repeated identical
+  inputs remain intentionally tied. No scorer submission has been made.
+
+## 2026-08-27 Track 2 tie-resolution checkpoint (superseded by the 2026-08-28 refresh)
+
+- The exported `rank_answer` path, `breakdown_answer` path, and native harness
+  now share the same weather typed-fact adjustment and public-score path. This
+  closes the earlier harness/ABI mismatch.
+- Numeric context matching ignores nearby figures and typed-fact adjustments
+  are penalty-only. The public score has deterministic FNV-1a/splitmix tie
+  resolution for zero, ordinary, and saturated quantized bands; no time,
+  randomness, I/O, or map iteration is involved.
+- Against the 156-row fit, 44-row holdout, and 200-row Explorer WEATHER_CHECK
+  corpus, distinct-input ties are `0` in all three runs. Repeated identical
+  `(question, ground_truth, answer)` inputs remain tied by design.
+- Full release harness results with 1,000 determinism iterations and 1,000
+  latency samples: fit margin `0.939391`, ordering `156/156`, agreement
+  `0.721230`; holdout margin `0.938643`, ordering `43/44`; corpus margin
+  `0.994568`, ordering `200/200`. All three runs passed determinism. p99
+  latency was `6.62 ms`, `3.00 ms`, and `4.97 ms`, respectively.
+- Native Rust tests pass `18/18` for the production feature set and `19/19`
+  with `real_weights`; the release WASM passes `1000` repeated calls
+  under both wazero compiler and interpreter runtimes. Artifact SHA-256 is
+  `56e2c01d4977be77601b168e7de82996cb5fa51262d8912ac6efc5674f2798c5`.
+- These were local relative measurements before the live-bar refresh. Track 2
+  remains unregistered until the artifact is committed and a clean-clone hash
+  is reproduced.
 
 ## Current state
 
@@ -8,8 +76,10 @@ Last checked: 2026-08-27 14:31 UTC.
 - Remote `isobar.service` is enabled and active with zero restarts.
 - Telegraph registration `224` is active; it is no longer pending.
 - Epoch 284 baseline: `WEATHER_CHECK #6/9`, `WEATHER_FORECAST #9/11`.
-- Current epoch-286 snapshot: `WEATHER_CHECK #1/9`, score `0.018964943`;
+- Epoch 286 is historical: `WEATHER_CHECK #1/9`, score `0.018964943`;
   `WEATHER_FORECAST #2/11`, score `0.0090172645`.
+- Epoch 287 is the current measurement: `WEATHER_CHECK #1/9`, score
+  `0.29039782`; no WEATHER_FORECAST row has been scored yet.
 - Epoch-286 WEATHER_FORECAST leader is `verity-weather-forecast` at
   `0.0098297`; its question/reference is captured in [`GROUND_TRUTH.md`](GROUND_TRUTH.md).
 - The live score is intent-specific and is not a promise of `0.019`. The prior
@@ -26,8 +96,11 @@ Last checked: 2026-08-27 14:31 UTC.
   available forecast; structured output remains complete.
 - Track 2 is the in-repository Isobar Scorer in `src/scorer/`; it is not a
   separate project. The scorer’s package/binary names were aligned to Isobar in
-  `2ea0af7`. Its 13-test native suite, release WASM build, and 1,000-repeat
-  wazero checks pass under both compiler and interpreter runtimes.
+  `2ea0af7`. Its 21-test production suite (22 with `real_weights`), release
+  WASM build, and 1,000-repeat
+  wazero checks pass under both compiler and interpreter runtimes. The current
+  local WASM artifact is 1,103,845 bytes with SHA-256
+  `b8a920df89f38245daa82e91174db4467c4941fb2e619dd98fbcb81cee116b94`.
 - Live scoring evidence is recorded in [`GROUND_TRUTH.md`](GROUND_TRUTH.md).
 
 ## 2026-08-26 release checkpoint
@@ -120,10 +193,14 @@ Last checked: 2026-08-27 14:31 UTC.
   higher absolute score is useful, but rank and repeatable performance matter
   more than an unverified numeric target.
 - Keep a per-epoch score log and change one scorer-facing variable at a time.
+- The captured scorer corpus now has zero distinct-input ties and the live
+  champion bar has been refreshed. Before registration, commit the final
+  scorer change, reproduce the artifact from a clean clone, and rerun the full
+  pre-flight for `WEATHER_CHECK` only.
 - The current local replica favors the reference-aligned WEATHER_CHECK answer
   over the 12-word compact variant; this is a proxy result, not a live rank.
-- Run the in-repository Isobar Scorer harness against the captured weather
-  corpus, then calibrate its champion margin and ordering from a live epoch.
+- The in-repository Isobar Scorer harness has been run against the captured
+  weather corpus and calibrated against the refreshed live champion bar.
 - Start the Track 3 route agent under `app/` when the application window opens
   on Aug 31.
 

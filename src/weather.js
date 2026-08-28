@@ -558,7 +558,15 @@ export function createWeatherService({ fetchImpl = fetch, logger = console, now 
       const body = await upstream(url, signal); const retrievedAt = now().toISOString();
       const options = {
         requestStart, requestEnd, requestedFields: input.fields, requestText: input.request_text,
-        renderHourly: responseKind === 'forecast' && (String(input.interval ?? '').toLowerCase() === 'hourly' || /\bhourly\b/i.test(input.request_text ?? ''))
+        // Telegraph's forecast requests may carry a multi-day window without
+        // forwarding the original "hourly" field. Long windows are the
+        // hourly forecast intent in practice and must use the same complete
+        // answer shape as explicitly hourly requests.
+        renderHourly: responseKind === 'forecast' && (
+          days > 2 ||
+          String(input.interval ?? '').toLowerCase() === 'hourly' ||
+          /\bhourly\b/i.test(input.request_text ?? '')
+        )
       };
       const payload = responseKind === 'current' ? currentPayload(location, body, retrievedAt) : forecastPayload(location, body, days, retrievedAt, false, options);
       weather.set(key, { payload, cachedAt: now().getTime() }); stale.set(key, { body, location, retrievedAt, options }); return payload;
