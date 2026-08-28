@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildApp } from '../src/server.js';
-import { compass, conditions, conditionSlug, currentPayload, forecastPayload, isForecastRequest, normalizeInput } from '../src/weather.js';
+import { compass, conditions, conditionSlug, currentPayload, forecastPayload, isForecastRequest, normalizeInput, stormPayload } from '../src/weather.js';
 
 const location = { name: 'Gujranwala', admin1: 'Punjab', country: 'Pakistan', latitude: 32.15567, longitude: 74.18705, timezone: 'Asia/Karachi' };
 const current = {
@@ -28,6 +28,17 @@ const daily = {
   hourly_units: { temperature_2m: '°C', dew_point_2m: '°C', precipitation: 'mm', precipitation_probability: '%', wind_speed_10m: 'm/s' },
   hourly: { time: ['2026-08-26T00:00', '2026-08-26T01:00'], temperature_2m: [28.5, 29.1], dew_point_2m: [22.1, 22.3], precipitation: [2.4, 0], precipitation_probability: [0, 10], weather_code: [63, 2], wind_speed_10m: [5.1, 4.2] },
   daily: { time: ['2026-08-26', '2026-08-27'], weather_code: [63, 2], temperature_2m_max: [36.8, 35.1], temperature_2m_min: [27.1, 26.4], precipitation_sum: [2.4, 0], precipitation_probability_max: [65, 10], wind_speed_10m_max: [18.2, 12] }
+};
+const storm = {
+  timezone: 'UTC',
+  daily_units: { temperature_2m_max: '°C', temperature_2m_min: '°C', precipitation_sum: 'mm', precipitation_probability_max: '%', wind_speed_10m_max: 'm/s', wind_gusts_10m_max: 'm/s' },
+  hourly_units: { temperature_2m: '°C', precipitation: 'mm', precipitation_probability: '%', weather_code: 'wmo code', wind_speed_10m: 'm/s', wind_gusts_10m: 'm/s', wind_direction_10m: '°' },
+  hourly: {
+    time: ['2026-08-26T00:00', '2026-08-26T01:00'],
+    temperature_2m: [25, 25.4], precipitation: [0, 0], precipitation_probability: [0, 0], weather_code: [1, 2],
+    wind_speed_10m: [3.6, 3.5], wind_gusts_10m: [7.4, 7], wind_direction_10m: [215, 225]
+  },
+  daily: { time: ['2026-08-26', '2026-08-27'], weather_code: [1, 2], temperature_2m_max: [28, 29], temperature_2m_min: [20, 21], precipitation_sum: [0, 0], precipitation_probability_max: [0, 0], wind_speed_10m_max: [3.6, 3.5], wind_gusts_10m_max: [7.4, 7] }
 };
 
 test('complete WMO table and unknown fallback', () => {
@@ -70,6 +81,13 @@ test('keeps a next-24-hour current question on the current route', () => {
   const prompt = "What is the current temperature and 'feels like' temperature in Tokyo, Japan, and what is the forecast for the next 24 hours including any chance of precipitation?";
   assert.equal(normalizeInput({ q: prompt }).q, 'Tokyo, Japan');
   assert.equal(isForecastRequest(prompt), false);
+});
+test('normalizes storm prompts and extracts their location and horizon', () => {
+  const prompt = 'Are wind speeds over Islamabad strong enough to cause disruptions today?';
+  const result = normalizeInput({ q: prompt });
+  assert.equal(result.q, 'Islamabad');
+  assert.equal(result.request_text, prompt);
+  assert.equal(result.hours, undefined);
 });
 test('current prose is concise and keeps detail structured', () => {
   const result = currentPayload(location, current, '2026-08-25T19:16:03.000Z');
@@ -121,11 +139,28 @@ test('forecast echoes relative natural-language window and only requested fields
   assert.match(result.answer, /precipitation probability 65%/);
   assert.ok(!result.answer.includes('wind speed'));
 });
-test('hourly forecast rendering follows the live leader shape', () => {
-  const result = forecastPayload(location, daily, 2, '2026-08-25T19:16:03.000Z', false, { renderHourly: true });
-  assert.match(result.answer, /^2026-08-26: Rain, 27.1-36.8 C, precipitation up to 65%, wind up to 65.5 km\/h; 2026-08-27: Partly cloudy, 26.4-35.1 C, precipitation up to 10%, wind up to 43.2 km\/h Hourly:/);
-  assert.match(result.answer, /2026-08-26T00:00 Rain, temp 28.5 C, dew point 22.1 C, precipitation 0%\/2.4 mm, wind 18.4 km\/h/);
+test('hourly forecast keeps detail structured and limits prose to requested fields', () => {
+  const result = forecastPayload(location, daily, 2, '2026-08-25T19:16:03.000Z', false, {
+    renderHourly: true, requestedFields: 'temperature and precipitation'
+  });
+  assert.equal(result.answer, 'Gujranwala, Pakistan forecast for 2026-08-26 through 2026-08-27: temperatures range from 28.5C to 29.1C; total precipitation 2.4mm. Hourly data contains 2 rows.');
+  assert.equal(result.forecast.length, 2);
+  assert.equal(result.forecast[0].wind_ms, 5.1);
+  assert.equal(result.forecast[0].dew_point_c, 22.1);
+  assert.ok(!result.answer.includes('wind'));
+  assert.ok(!result.answer.includes('dew point'));
+  assert.ok(!result.answer.includes('Rain'));
   assert.ok(!result.answer.includes('Nearest hour'));
+});
+test('storm alert payload leads with wind, gust, precipitation, and risk facts', () => {
+  const result = stormPayload(location, storm, 2, '2026-08-25T19:16:03.000Z', false, { requestedHours: 48 });
+  assert.equal(result.answer, 'The forecast for Gujranwala over the next 48 hours predicts sustained winds up to 13 km/h with peak gusts of 26.6 km/h, no precipitation, and a low risk score of 0.17. No thunderstorm conditions were returned in the hourly forecast. No periods with sustained winds above 25 knots are forecast.');
+  assert.equal(result.storm.risk_score, 0.17);
+  assert.equal(result.storm.risk_level, 'low');
+  assert.equal(result.storm.peak_gust_kmh, 26.6);
+  assert.equal(result.storm.sustained_above_25_knots, false);
+  assert.equal(result.forecast[0].wind_direction_compass, 'SW');
+  assert.equal(result.forecast[0].gust_knots, 14.4);
 });
 test('HTTP routes are graceful 200s and cap days', async () => {
   const calls = [];
@@ -141,17 +176,20 @@ test('HTTP routes are graceful 200s and cap days', async () => {
   assert.equal((await app.inject('/weather?location=Tokyo')).statusCode, 200);
   assert.equal((await app.inject('/weather?q=Give%20me%20a%207-day%20hourly%20weather%20forecast%20for%20Tokyo%2C%20Japan%2C%20including%20temperature%20in%20Celsius.')).statusCode, 200);
   assert.equal((await app.inject('/forecast?city=Tokyo&start_time=2026-09-01T06%3A00%3A00Z&end_time=2026-09-01T12%3A00%3A00Z')).statusCode, 200);
+  assert.equal((await app.inject('/storm?q=Tokyo&hours=48')).statusCode, 200);
   assert.equal((await app.inject('/weather?lat=32.15&lon=74.18')).statusCode, 200);
   assert.equal((await app.inject('/weather')).statusCode, 200);
   assert.equal((await app.inject('/weather?lat=999&lon=0')).statusCode, 200);
   await app.close();
-  assert.equal(calls.length, 5);
+  assert.equal(calls.length, 6);
   assert.equal(calls[1].input.q, 'Tokyo');
   assert.equal(calls[2].kind, 'forecast');
   assert.equal(calls[2].input.q, 'Tokyo, Japan');
   assert.equal(calls[2].input.days, 7);
   assert.equal(calls[3].input.q, 'Tokyo');
   assert.equal(calls[3].input.start_time, '2026-09-01T06:00:00Z');
+  assert.equal(calls[4].kind, 'storm');
+  assert.equal(calls[4].input.q, 'Tokyo');
 });
 test('identical cached query is byte-identical', async () => {
   let calls = 0;
@@ -235,6 +273,28 @@ test('service honors exact coordinate hourly horizons', async () => {
   assert.ok(!result.answer.includes('Nearest hour'));
 });
 
+test('service routes STORM_ALERT queries to gust-aware forecast data', async () => {
+  const urls = [];
+  const service = (await import('../src/weather.js')).createWeatherService({
+    now: () => new Date('2026-08-26T15:00:00Z'), logger: { info() {} },
+    fetchImpl: async (url) => {
+      urls.push(new URL(url));
+      return { ok: true, json: async () => storm };
+    }
+  });
+  const result = await service.query('storm', {
+    latitude: '37.7749', longitude: '-122.4194', hours: '48',
+    request_text: 'Can you provide a 48-hour wind gust forecast including disruption risk?'
+  }, AbortSignal.timeout(1000));
+  assert.equal(urls.length, 1);
+  assert.equal(urls[0].searchParams.get('forecast_hours'), '48');
+  assert.equal(urls[0].searchParams.get('wind_speed_unit'), 'ms');
+  assert.equal(urls[0].searchParams.get('hourly'), 'temperature_2m,precipitation,precipitation_probability,weather_code,wind_speed_10m,wind_gusts_10m,wind_direction_10m');
+  assert.equal(result.requested_hours, 48);
+  assert.equal(result.forecast.length, 2);
+  assert.equal(result.storm.peak_gust_kmh, 26.6);
+});
+
 test('service honors date-window aliases and requested hourly probability fields', async () => {
   const urls = [];
   const sevenDay = {
@@ -264,7 +324,7 @@ test('service honors date-window aliases and requested hourly probability fields
     city: 'Tokyo', start_date: '2026-09-03', end_date: '2026-09-09',
     fields: 'temperature,precipitation_probability,wind_speed', interval: 'hourly'
   }, AbortSignal.timeout(1000));
-  assert.match(result.answer, /^2026-09-03: Mainly clear, 23-30 C, precipitation up to 10%, wind up to 4.3 km\/h; 2026-09-04: Partly cloudy/);
+  assert.equal(result.answer, 'Gujranwala, Pakistan forecast for 2026-09-03 through 2026-09-09: temperatures range from 25C to 25C; precipitation probability up to 10%; wind speeds up to 4.3 km/h. Hourly data contains 1 rows.');
   assert.equal(urls[1].searchParams.get('start_date'), '2026-09-03');
   assert.equal(urls[1].searchParams.get('end_date'), '2026-09-09');
   assert.equal(urls[1].searchParams.get('hourly'), 'temperature_2m,dew_point_2m,precipitation,precipitation_probability,weather_code,wind_speed_10m');
@@ -291,7 +351,6 @@ test('multi-day protocol forecasts use the complete hourly answer shape without 
       : { ok: true, json: async () => sevenDay }
   });
   const result = await service.query('forecast', { city: 'Tokyo', days: 7 }, AbortSignal.timeout(1000));
-  assert.match(result.answer, /^2026-09-03: Mainly clear, 23-30 C, precipitation up to 10%, wind up to 4.3 km\/h; 2026-09-04: Partly cloudy/);
-  assert.match(result.answer, /Hourly: 2026-08-26T00:00 Rain, temp 28.5 C, dew point 22.1 C, precipitation 0%\/2.4 mm, wind 18.4 km\/h/);
+  assert.equal(result.answer, 'Gujranwala, Pakistan forecast for 2026-09-03 through 2026-09-09: temperatures range from 28.5C to 29.1C; total precipitation 2.4mm; precipitation probability up to 10%; conditions include rain, partly cloudy; wind speeds up to 18.4 km/h; dew points range from 22.1C to 22.3C. Hourly data contains 2 rows.');
   assert.ok(!result.answer.includes('Nearest hour'));
 });

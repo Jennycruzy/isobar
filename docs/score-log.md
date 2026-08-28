@@ -3,6 +3,15 @@
 Scores and ranks are intent-specific. Values below are not comparable between
 WEATHER_CHECK and WEATHER_FORECAST.
 
+## Public Telegraph updates
+
+These are the three public Isobar posts that directly document the Telegraph
+work. The unrelated AlphaGate and short reply posts are intentionally omitted.
+
+- [Plain-English search fix — 2026-08-28](https://x.com/jennyoliver57/status/2093325863852867948): records the fix for natural-language weather requests being treated as literal locations or routed to the wrong endpoint; the post includes a screenshot.
+- [Epoch 285 forecast result — 2026-08-27](https://x.com/jennyoliver57/status/2093047756784836626): reports Isobar Weather at `#1` on `WEATHER_FORECAST` with score `0.008892506`, with a screenshot.
+- [Telegraph registration and Epoch 284 baseline — 2026-08-27](https://x.com/jennyoliver57/status/2092885488231125388): documents live deployment, registration `#224`, and baseline ranks `WEATHER_CHECK #6/9` and `WEATHER_FORECAST #9/11`.
+
 ## Track 2 forecast artifact revalidation — 2026-08-28
 
 The forecast-enabled native harness was rebuilt and rerun from the captured

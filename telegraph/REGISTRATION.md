@@ -47,6 +47,14 @@ Alexandria may place the full question in `q`, `question`, `prompt`, or
 duration, and requested fields from that value and supports both `/weather` and
 `/forecast` routes.
 
+## STORM_ALERT preparation
+
+The official supported-intent name is `STORM_ALERT` (not `STORM_CHECK`). A
+local `/storm` route is now implemented and tested, but it is intentionally
+not included in registration `#224` yet. Register it only as a separate
+intent after deploying and externally validating the route; the existing
+registration remains the source of truth for what is live.
+
 ## Scoring evidence
 
 The Explorer's documented `/api/signals?limit=200` path returned HTTP 404 at

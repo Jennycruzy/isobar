@@ -71,15 +71,25 @@ function nonEmpty(value) {
 
 function promptLocation(value) {
   const text = nonEmpty(value);
-  if (!text || !/[?!.]|\b(?:weather|forecast|temperature|conditions?)\b/i.test(text)) return text;
-  const stop = '(?=\\s*,?\\s*(?:including|with|starting|beginning|from|before|and|that|please)\\b|[?!.]|$)';
+  if (!text || !/[?!.]|\b(?:weather|forecast|temperature|conditions?|storm|wind|severe)\b/i.test(text)) return text;
+  const stop = '(?=\\s*,?\\s*(?:including|with|starting|beginning|from|before|and|that|please|strong enough|expected|should|today|tomorrow|over\\s+the\\s+next|for\\s+the\\s+next|next)\\b|[?!.]|$)';
+  const clean = (candidate) => candidate
+    .replace(/\s*\(?\s*(?:latitude|lat|longitude|lon)\b.*$/i, '')
+    .replace(/[,'"]+$/, '')
+    .trim();
+  const parenthetical = text.match(/\(\s*([A-Z][A-Za-z.'-]*(?:\s+[A-Z][A-Za-z.'-]*){0,4}(?:,\s*[A-Z][A-Za-z.'-]*){0,2})\s*\)/);
+  if (parenthetical?.[1]) return parenthetical[1].trim();
+  const namedLocation = text.match(/\blocation\s+([A-Z][A-Za-z.'-]*(?:\s+[A-Z][A-Za-z.'-]*){0,4}(?:,\s*[A-Z][A-Za-z.'-]*){0,2})(?=\s*\(|\s*,?\s*(?:including|with|starting|beginning|from|before|and|that|please|over\s+the\s+next|for\s+the\s+next|next|today|tomorrow)\b|[?!.]|$)/i);
+  if (namedLocation?.[1]) return clean(namedLocation[1]);
   const patterns = [
-    new RegExp(`\\b(?:weather(?:\\s+forecast)?|forecast|temperature|conditions?)\\s+(?:for|in|at)\\s+(.+?)${stop}`, 'i'),
-    new RegExp(`\\b(?:for|in|at)\\s+(.+?)${stop}`, 'i')
+    new RegExp(`\\b(?:forecast|storm(?:\\s+alert)?|severe weather|wind(?:\\s+speed(?:s)?)?|temperature|conditions?)\\b.*\\bfor\\s+(?!the\\s+next\\b|next\\b)(.+?)${stop}`, 'i'),
+    new RegExp(`\\b(?:weather(?:\\s+forecast)?|forecast|storm(?:\\s+alert)?|severe weather|wind(?:\\s+speed)?|temperature|conditions?)\\s+(?:for|in|at|over)\\s+(.+?)${stop}`, 'i'),
+    new RegExp(`\\b(?:for|in|at|over)\\s+(.+?)${stop}`, 'i')
   ];
   for (const pattern of patterns) {
     const match = text.match(pattern);
-    if (match?.[1]) return match[1].trim().replace(/[,'"]+$/, '').trim();
+    const candidate = clean(match?.[1] ?? '');
+    if (candidate) return candidate;
   }
   return text;
 }
@@ -429,6 +439,147 @@ function forecastRows(body, maxHours) {
   return rows;
 }
 
+function stormRows(body, maxHours) {
+  const h = body.hourly ?? {};
+  const hu = body.hourly_units ?? {};
+  const times = h.time ?? [];
+  const timezone = body.timezone ?? 'UTC';
+  const rows = [];
+  const count = maxHours === undefined ? times.length : Math.min(times.length, maxHours);
+  for (let i = 0; i < count; i++) {
+    const row = { time: isoMinute(times[i], timezone) };
+    if (present(h.temperature_2m?.[i])) row.temp_c = Number(one(h.temperature_2m[i]));
+    if (present(h.precipitation?.[i])) row.precip_mm = Number(one(h.precipitation[i]));
+    if (present(h.precipitation_probability?.[i])) row.precip_probability_pct = Number(integer(h.precipitation_probability[i]));
+    if (present(h.wind_speed_10m?.[i])) {
+      const speed = windMs(h.wind_speed_10m[i], hu.wind_speed_10m ?? 'm/s');
+      row.wind_ms = Number(one(speed));
+      row.wind_kmh = Number(one(speed * 3.6));
+      row.wind_knots = Number(one(speed * 1.94384449));
+    }
+    if (present(h.wind_gusts_10m?.[i])) {
+      const gust = windMs(h.wind_gusts_10m[i], hu.wind_gusts_10m ?? 'm/s');
+      row.gust_ms = Number(one(gust));
+      row.gust_kmh = Number(one(gust * 3.6));
+      row.gust_knots = Number(one(gust * 1.94384449));
+    }
+    if (present(h.wind_direction_10m?.[i])) {
+      row.wind_direction_deg = Number(integer(h.wind_direction_10m[i]));
+      row.wind_direction_compass = compass(h.wind_direction_10m[i]).short;
+    }
+    if (present(h.weather_code?.[i])) {
+      row.weather_code = Number(h.weather_code[i]);
+      row.conditions = conditionSlug(h.weather_code[i]);
+      row.thunderstorm = Number(h.weather_code[i]) >= 95 && Number(h.weather_code[i]) <= 99;
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+
+function maximum(values) {
+  const finite = values.map(Number).filter(Number.isFinite);
+  return finite.length ? Math.max(...finite) : undefined;
+}
+
+function stormRiskLabel(score) {
+  if (score >= 0.75) return 'high';
+  if (score >= 0.5) return 'elevated';
+  if (score >= 0.25) return 'moderate';
+  if (score >= 0.1) return 'low';
+  return 'none';
+}
+
+function stormRiskScore(rows) {
+  const peakGust = maximum(rows.map((row) => row.gust_kmh));
+  const peakWind = maximum(rows.map((row) => row.wind_kmh));
+  const precipitationProbability = maximum(rows.map((row) => row.precip_probability_pct));
+  const peakPrecipitation = maximum(rows.map((row) => row.precip_mm));
+  const thunderstorm = rows.some((row) => row.thunderstorm);
+  // Keep the primary signal transparent: peak gusts at 160 km/h represent a
+  // score of 1.0. Precipitation and thunderstorm evidence only raise the
+  // score when the wind signal alone would understate disruption risk.
+  const windScore = Math.max(peakGust ?? 0, peakWind ?? 0) / 160;
+  const precipitationScore = Math.min(1, ((precipitationProbability ?? 0) / 100) * 0.4 + (peakPrecipitation ?? 0) / 25);
+  const stormScore = thunderstorm ? 0.25 : 0;
+  return Number(Math.min(1, Math.max(windScore, precipitationScore, stormScore)).toFixed(2));
+}
+
+function stormPlace(location) {
+  return location.name ?? label(location);
+}
+
+export function stormPayload(location, body, days, retrievedAt, stale = false, options = {}) {
+  location = { ...location, timezone: location.timezone === 'auto' || !location.timezone ? body.timezone : location.timezone };
+  const d = body.daily ?? {};
+  const du = body.daily_units ?? {};
+  const requestedHours = options.requestedHours ?? Math.min(48, Math.max(1, days * 24));
+  const rows = stormRows(body, requestedHours);
+  const peakWindKmh = maximum(rows.map((row) => row.wind_kmh));
+  const peakGustKmh = maximum(rows.map((row) => row.gust_kmh));
+  const peakPrecipitation = maximum(rows.map((row) => row.precip_mm));
+  const precipitationTotal = rows.map((row) => Number(row.precip_mm)).filter(Number.isFinite).reduce((sum, value) => sum + value, 0);
+  const precipitationProbability = maximum(rows.map((row) => row.precip_probability_pct));
+  const stormHours = rows.filter((row) => row.thunderstorm).map((row) => row.time);
+  const riskScore = stormRiskScore(rows);
+  const riskLabel = stormRiskLabel(riskScore);
+  const highWindThresholdMs = 25 * 0.514444;
+  const thresholdRows = rows.filter((row) => Number(row.wind_ms) > highWindThresholdMs);
+  const hasWind = rows.some((row) => Number.isFinite(Number(row.wind_kmh)));
+  const hasPrecipitation = rows.some((row) => Number.isFinite(Number(row.precip_mm)));
+  const place = stormPlace(location);
+  const windText = peakWindKmh === undefined ? 'sustained wind data was not returned' : `sustained winds up to ${decimal(peakWindKmh)} km/h`;
+  const gustText = peakGustKmh === undefined ? 'peak gust data was not returned' : `peak gusts of ${decimal(peakGustKmh)} km/h`;
+  const precipitationText = !hasPrecipitation
+    ? 'precipitation data was not returned'
+    : precipitationTotal === 0
+      ? 'no precipitation'
+    : peakPrecipitation !== undefined
+      ? `precipitation up to ${decimal(peakPrecipitation)} mm per hour`
+      : `precipitation totaling ${decimal(precipitationTotal)} mm`;
+  let answer = `The forecast for ${place} over the next ${requestedHours} hours predicts ${windText} with ${gustText}, ${precipitationText}, and a ${riskLabel} risk score of ${riskScore.toFixed(2)}.`;
+  if (stormHours.length) answer += ` Thunderstorms are possible during ${stormHours.slice(0, 4).join(', ')}${stormHours.length > 4 ? ' and other forecast hours' : ''}.`;
+  else answer += ' No thunderstorm conditions were returned in the hourly forecast.';
+  if (!hasWind) {
+    answer += ' The sustained-wind threshold could not be evaluated because hourly wind data was not returned.';
+  } else if (thresholdRows.length) {
+    answer += ` Sustained winds exceed 25 knots during ${thresholdRows.slice(0, 4).map((row) => row.time).join(', ')}${thresholdRows.length > 4 ? ' and other forecast hours' : ''}.`;
+  } else {
+    answer += ' No periods with sustained winds above 25 knots are forecast.';
+  }
+  if (/\b(?:100u|100v|era5)\b/i.test(options.requestText ?? '')) {
+    answer += ' The returned wind values are 10 m surface forecasts; 100u/100v model-level components are not supplied by this source.';
+  }
+  if (stale) answer += ' This is the most recent cached storm forecast because the live weather service is temporarily unavailable.';
+  return {
+    answer,
+    location,
+    storm: {
+      risk_score: riskScore,
+      risk_level: riskLabel,
+      active_storm_systems: stormHours.length > 0,
+      thunderstorm_hours: stormHours,
+      sustained_wind_max_kmh: peakWindKmh,
+      sustained_wind_max_ms: peakWindKmh === undefined ? undefined : Number((peakWindKmh / 3.6).toFixed(1)),
+      sustained_wind_max_knots: peakWindKmh === undefined ? undefined : Number((peakWindKmh / 1.852).toFixed(1)),
+      peak_gust_kmh: peakGustKmh,
+      peak_gust_ms: peakGustKmh === undefined ? undefined : Number((peakGustKmh / 3.6).toFixed(1)),
+      peak_gust_knots: peakGustKmh === undefined ? undefined : Number((peakGustKmh / 1.852).toFixed(1)),
+      precipitation_total_mm: Number(precipitationTotal.toFixed(1)),
+      peak_hourly_precipitation_mm: peakPrecipitation,
+      precipitation_probability_max_pct: precipitationProbability,
+      sustained_above_25_knots: thresholdRows.length > 0,
+      sustained_above_25_knots_hours: thresholdRows.map((row) => row.time),
+      warning_data: 'not-provided-by-open-meteo'
+    },
+    daily: d,
+    daily_units: du,
+    forecast: rows,
+    requested_hours: requestedHours,
+    source: 'open-meteo', retrieved_at: stale ? `${retrievedAt} (stale)` : retrievedAt
+  };
+}
+
 function nearestRow(rows, target) {
   if (!rows.length) return null;
   const targetDate = utcDate(target) ?? new Date();
@@ -489,7 +640,7 @@ export function forecastPayload(location, body, days, retrievedAt, stale = false
   let answer = options.requestedHours !== undefined && options.requestedHours <= 48
     ? windowForecastAnswer(location, rows, options.requestedHours, startStamp, endStamp)
     : options.renderHourly
-    ? detailedForecastAnswer(location, body, days, options.requestedHours)
+    ? conciseHourlyForecastAnswer(location, body, days, options.requestedHours, requestedFields)
     : startStamp && endStamp
     ? (hasClock(options.requestStart) || hasClock(options.requestEnd)
       ? `The ${windowLabel} for ${place} starts from ${startStamp} UTC with a cutoff deadline of ${endStamp} UTC.${fieldPhrase} ${sentences.join('; ')}`
@@ -515,55 +666,73 @@ export function forecastPayload(location, body, days, retrievedAt, stale = false
   };
 }
 
-function detailedForecastAnswer(location, body, days, requestedHours) {
-  const d = body.daily ?? {};
-  const du = body.daily_units ?? {};
-  const h = body.hourly ?? {};
-  const hu = body.hourly_units ?? {};
-  const dailyCount = Math.min(
-    requestedHours === undefined ? days : Math.ceil(requestedHours / 24),
-    d.time?.length ?? 0
-  );
-  const dailyParts = [];
-  for (let i = 0; i < dailyCount; i++) {
-    const facts = [];
-    if (present(d.weather_code?.[i])) facts.push(forecastCondition(d.weather_code[i]));
-    if (present(d.temperature_2m_min?.[i]) && present(d.temperature_2m_max?.[i])) {
-      facts.push(`${decimal(d.temperature_2m_min[i])}-${decimal(d.temperature_2m_max[i])} C`);
-    }
-    if (present(d.precipitation_probability_max?.[i])) {
-      facts.push(`precipitation up to ${integer(d.precipitation_probability_max[i])}%`);
-    }
-    if (present(d.wind_speed_10m_max?.[i])) {
-      const speed = windMs(d.wind_speed_10m_max[i], du.wind_speed_10m ?? 'm/s') * 3.6;
-      facts.push(`wind up to ${decimal(speed)} km/h`);
-    }
-    dailyParts.push(`${String(d.time[i])}: ${facts.join(', ')}`);
+function forecastFieldSelection(fields) {
+  const text = String(scalar(fields) ?? '').toLowerCase().replace(/[_-]+/g, ' ');
+  const explicit = /\b(?:temperature|temp|2t|precipitation|precip|rain|snow|wind|gust|dew\s*point|weather|condition|cloud|probability|chance)\b/.test(text);
+  if (!explicit) {
+    return { temperature: true, precipitation: true, precipitationProbability: true, conditions: true, wind: true, dewPoint: true };
   }
-  const times = h.time ?? [];
-  const hourlyParts = [];
-  const hourlyCount = requestedHours === undefined ? times.length : Math.min(times.length, requestedHours);
-  for (let i = 0; i < hourlyCount; i++) {
-    const timestamp = isoMinute(times[i], body.timezone ?? 'UTC').replace(/Z$/, '');
-    const condition = present(h.weather_code?.[i]) ? forecastCondition(h.weather_code[i]) : '';
-    const facts = [];
-    if (present(h.temperature_2m?.[i])) facts.push(`temp ${decimal(h.temperature_2m[i])} C`);
-    if (present(h.dew_point_2m?.[i])) facts.push(`dew point ${decimal(h.dew_point_2m[i])} C`);
-    const precipitation = [];
-    if (present(h.precipitation_probability?.[i])) precipitation.push(`${integer(h.precipitation_probability[i])}%`);
-    if (present(h.precipitation?.[i])) precipitation.push(`${decimal(h.precipitation[i])} mm`);
-    if (precipitation.length) facts.push(`precipitation ${precipitation.join('/')}`);
-    if (present(h.wind_speed_10m?.[i])) {
-      const speed = windMs(h.wind_speed_10m[i], hu.wind_speed_10m ?? 'm/s') * 3.6;
-      facts.push(`wind ${decimal(speed)} km/h`);
-    }
-    const suffix = facts.join(', ');
-    hourlyParts.push(`${timestamp}${condition ? ` ${condition}` : ''}${suffix ? `, ${suffix}` : ''}`);
-  }
+  return {
+    temperature: /\b(?:temperature|temp|2t)\b/.test(text),
+    precipitation: /\b(?:precip|rain|snow)\b/.test(text) || /\bprecipitation\b(?!\s+(?:probability|chance)\b)/.test(text),
+    precipitationProbability: /\b(?:probability|chance)\b/.test(text),
+    conditions: /\b(?:weather|condition|cloud|rain|snow|drizzle|thunderstorm)\b/.test(text),
+    wind: /\b(?:wind|gust)\b/.test(text),
+    dewPoint: /\bdew\s*point\b/.test(text)
+  };
+}
+
+function conciseHourlyForecastAnswer(location, body, days, requestedHours, requestedFields) {
+  const rows = forecastRows(body, requestedHours);
   const place = location.name && location.country ? `${location.name}, ${location.country}` : location.name ?? label(location);
-  let answer = dailyParts.join('; ');
-  if (hourlyParts.length) answer += `${answer ? ' ' : ''}Hourly: ${hourlyParts.join('; ')}`;
-  return answer || `${place} forecast: no forecast data was returned`;
+  if (!rows.length) return `${place} forecast: no forecast data was returned`;
+
+  const fields = forecastFieldSelection(requestedFields);
+  const parts = [];
+  const temperatures = rows.map((row) => Number(row.temp_c)).filter(Number.isFinite);
+  if (fields.temperature && temperatures.length) {
+    parts.push(`temperatures range from ${decimal(Math.min(...temperatures))}C to ${decimal(Math.max(...temperatures))}C`);
+  }
+
+  const precipitation = rows.map((row) => Number(row.precip_mm)).filter(Number.isFinite);
+  if (fields.precipitation) {
+    if (!precipitation.length) parts.push('precipitation data was not returned');
+    else {
+      const total = precipitation.reduce((sum, value) => sum + value, 0);
+      parts.push(total === 0 ? 'no precipitation is expected' : `total precipitation ${decimal(total)}mm`);
+    }
+  }
+
+  if (fields.precipitationProbability) {
+    const probabilities = rows.map((row) => Number(row.precip_probability_pct)).filter(Number.isFinite);
+    if (probabilities.length) parts.push(`precipitation probability up to ${integer(Math.max(...probabilities))}%`);
+  }
+
+  if (fields.conditions) {
+    const conditionsList = [...new Set(rows.map((row) => WMO_CODE_BY_SLUG.get(row.conditions)).filter((value) => value !== undefined).map(forecastCondition))];
+    if (conditionsList.length) parts.push(`conditions include ${conditionsList.slice(0, 3).join(', ').toLowerCase()}`);
+  }
+
+  if (fields.wind) {
+    const wind = rows.map((row) => Number(row.wind_ms) * 3.6).filter(Number.isFinite);
+    if (wind.length) parts.push(`wind speeds up to ${decimal(Math.max(...wind))} km/h`);
+  }
+
+  if (fields.dewPoint) {
+    const dewPoints = rows.map((row) => Number(row.dew_point_c)).filter(Number.isFinite);
+    if (dewPoints.length) parts.push(`dew points range from ${decimal(Math.min(...dewPoints))}C to ${decimal(Math.max(...dewPoints))}C`);
+  }
+
+  const dailyDates = (body.daily?.time ?? []).slice(0, Math.min(days, body.daily?.time?.length ?? 0)).map(datePart).filter(Boolean);
+  const firstDate = dailyDates[0] ?? datePart(rows[0].time);
+  const lastDate = dailyDates.at(-1) ?? datePart(rows.at(-1).time);
+  const period = firstDate && lastDate
+    ? firstDate === lastDate ? firstDate : `${firstDate} through ${lastDate}`
+    : `${days}-day window`;
+  let answer = `${place} forecast for ${period}`;
+  if (parts.length) answer += `: ${parts.join('; ')}`;
+  answer += `. Hourly data contains ${rows.length} rows.`;
+  return answer;
 }
 
 export function createWeatherService({ fetchImpl = fetch, logger = console, now = () => new Date() } = {}) {
@@ -583,7 +752,13 @@ export function createWeatherService({ fetchImpl = fetch, logger = console, now 
     throw lastError;
   }
   async function locate(input, signal) {
-    if (input.lat !== undefined && input.lon !== undefined) return { name: `${Number(input.lat).toFixed(4)}, ${Number(input.lon).toFixed(4)}`, latitude: Number(input.lat), longitude: Number(input.lon) };
+    if (input.lat !== undefined && input.lon !== undefined) {
+      const candidate = nonEmpty(input.q);
+      const placeName = candidate && !/\b(?:weather|forecast|wind|storm|severe|latitude|longitude|temperature|conditions?|next|hours?|today|tomorrow|using|variable|disruption)\b/i.test(candidate)
+        ? candidate
+        : `${Number(input.lat).toFixed(4)}, ${Number(input.lon).toFixed(4)}`;
+      return { name: placeName, latitude: Number(input.lat), longitude: Number(input.lon) };
+    }
     if (!input.q) return null;
     const key = input.q.trim().toLocaleLowerCase('en-US'); const cached = geocodes.get(key); if (cached) return cached;
     const url = new URL(GEO_URL); url.search = new URLSearchParams({ name: input.q, count: '1', language: 'en', format: 'json' });
@@ -601,6 +776,9 @@ export function createWeatherService({ fetchImpl = fetch, logger = console, now 
     if (!location) return { answer: `The location “${input.q ?? 'provided input'}” was not found, so current weather data is unavailable. Please check the spelling or provide latitude and longitude.`, location: null, source: 'open-meteo', retrieved_at: now().toISOString() };
     const explicitDays = Number.parseInt(scalar(input.days) ?? '', 10);
     const requestedHours = positiveInteger(input.hours);
+    const stormHours = responseKind === 'storm'
+      ? requestedHours ?? (/\btoday\b/i.test(input.request_text ?? '') ? 24 : 48)
+      : requestedHours;
     const coord = `${Number(location.latitude).toFixed(4)},${Number(location.longitude).toFixed(4)}`;
     const requestStart = scalar(input.start_time);
     const requestEnd = scalar(input.end_time);
@@ -608,13 +786,13 @@ export function createWeatherService({ fetchImpl = fetch, logger = console, now 
     const boundedDays = dateSpanDays(startDate, endDate);
     const defaultDays = Number.isFinite(explicitDays) && explicitDays > 0
       ? explicitDays
-      : requestedHours ? Math.ceil(requestedHours / 24) : 3;
+      : stormHours ? Math.ceil(stormHours / 24) : 3;
     const timestampFallbackDays = startDate && endDate && boundedDays === 1 && (hasClock(requestStart) || hasClock(requestEnd)) && !Number.isFinite(explicitDays) ? 2 : undefined;
     const days = Math.min(7, Math.max(1, timestampFallbackDays ?? boundedDays ?? defaultDays));
-    const fetchEndDate = responseKind === 'forecast' && startDate
+    const fetchEndDate = (responseKind === 'forecast' || responseKind === 'storm') && startDate
       ? (endDate && endDate > startDate ? endDate : nextDate(startDate))
       : endDate;
-    const key = `${responseKind}:${coord}:${responseKind === 'forecast' ? `${days}:${requestedHours ?? ''}:${startDate ?? ''}:${fetchEndDate ?? ''}` : ''}`; const hit = weather.get(key);
+    const key = `${responseKind}:${coord}:${responseKind === 'forecast' || responseKind === 'storm' ? `${days}:${stormHours ?? ''}:${startDate ?? ''}:${fetchEndDate ?? ''}` : ''}`; const hit = weather.get(key);
     if (hit && now().getTime() - hit.cachedAt < 60_000) return hit.payload;
     const url = new URL(FORECAST_URL); const params = { latitude: location.latitude, longitude: location.longitude, timezone: 'UTC', wind_speed_unit: 'ms' };
     if (responseKind === 'current') {
@@ -623,7 +801,10 @@ export function createWeatherService({ fetchImpl = fetch, logger = console, now 
       params.forecast_hours = '25';
     }
     else {
-      Object.assign(params, {
+      Object.assign(params, responseKind === 'storm' ? {
+        daily: 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max',
+        hourly: 'temperature_2m,precipitation,precipitation_probability,weather_code,wind_speed_10m,wind_gusts_10m,wind_direction_10m'
+      } : {
         daily: 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max',
         hourly: 'temperature_2m,dew_point_2m,precipitation,precipitation_probability,weather_code,wind_speed_10m'
       });
@@ -632,7 +813,7 @@ export function createWeatherService({ fetchImpl = fetch, logger = console, now 
         params.end_date = fetchEndDate ?? nextDate(startDate);
       } else {
         params.forecast_days = String(days);
-        if (requestedHours !== undefined) params.forecast_hours = String(Math.min(7 * 24, requestedHours));
+        if (stormHours !== undefined) params.forecast_hours = String(Math.min(7 * 24, stormHours));
       }
     }
     url.search = new URLSearchParams(params);
@@ -641,7 +822,7 @@ export function createWeatherService({ fetchImpl = fetch, logger = console, now 
       const variableText = [input.variable, input.variables].map((value) => String(scalar(value) ?? '')).join(' ');
       const options = {
         requestStart, requestEnd, requestedFields: input.fields, requestText: input.request_text,
-        requestedHours,
+        requestedHours: responseKind === 'storm' ? stormHours : requestedHours,
         // Telegraph's forecast requests may carry a multi-day window without
         // forwarding the original "hourly" field. Long windows are the
         // hourly forecast intent in practice and must use the same complete
@@ -654,11 +835,19 @@ export function createWeatherService({ fetchImpl = fetch, logger = console, now 
           /\b(?:2t|temperature_2m)\b/i.test(variableText)
         )
       };
-      const payload = responseKind === 'current' ? currentPayload(location, body, retrievedAt) : forecastPayload(location, body, days, retrievedAt, false, options);
+      const payload = responseKind === 'current'
+        ? currentPayload(location, body, retrievedAt)
+        : responseKind === 'storm'
+          ? stormPayload(location, body, days, retrievedAt, false, options)
+          : forecastPayload(location, body, days, retrievedAt, false, options);
       weather.set(key, { payload, cachedAt: now().getTime() }); stale.set(key, { body, location, retrievedAt, options }); return payload;
     } catch (error) {
       const old = stale.get(key); if (!old) throw error;
-      return responseKind === 'current' ? currentPayload(old.location, old.body, old.retrievedAt, true) : forecastPayload(old.location, old.body, days, old.retrievedAt, true, old.options);
+      return responseKind === 'current'
+        ? currentPayload(old.location, old.body, old.retrievedAt, true)
+        : responseKind === 'storm'
+          ? stormPayload(old.location, old.body, days, old.retrievedAt, true, old.options)
+          : forecastPayload(old.location, old.body, days, old.retrievedAt, true, old.options);
     }
   }
   return { query, probe: async (signal) => { const url = new URL(FORECAST_URL); url.search = new URLSearchParams({ latitude: '0', longitude: '0', current: 'temperature_2m', timezone: 'auto' }); await upstream(url, signal); return true; } };

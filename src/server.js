@@ -27,10 +27,11 @@ const LANDING_PAGE = `<!doctype html>
   <main>
     <h1>🌦️ Isobar Weather</h1>
     <div class="badge">ACTIVE TELEGRAPH MINER · REGISTRATION #224</div>
-    <p>Deterministic current conditions and forecasts for autonomous agents, backed by Open-Meteo. Isobar serves <code>WEATHER_CHECK</code> and <code>WEATHER_FORECAST</code> through Telegraph.</p>
+    <p>Deterministic current conditions, forecasts, and forecast-derived storm-risk checks for autonomous agents, backed by Open-Meteo. Isobar serves <code>WEATHER_CHECK</code>, <code>WEATHER_FORECAST</code>, and a pending <code>STORM_ALERT</code> path through Telegraph.</p>
     <ul>
       <li><code>GET /weather?q=Tokyo</code> — current conditions and the next-24-hour weather horizon</li>
       <li><code>GET /forecast?q=Tokyo&amp;days=2</code> — compact daily summaries plus hourly forecast data</li>
+      <li><code>GET /storm?q=Tokyo&amp;hours=48</code> — wind, gust, precipitation, thunderstorm, and disruption-risk forecast</li>
       <li><code>GET /health</code> — service liveness and upstream status</li>
     </ul>
     <p class="muted"><a href="https://github.com/Jennycruzy/isobar">source &amp; methodology</a> · <a href="https://explorer.telegraphprotocol.com/miners/224">Telegraph Explorer</a> · <a href="https://weather.isobars.xyz/health">live health</a></p>
@@ -57,9 +58,13 @@ export function buildApp(options = {}) {
     }
     const responseKind = kind === 'current' && isForecastRequest(query.request_text) ? 'forecast' : kind;
     try { return await service.query(responseKind, query, AbortSignal.timeout(4950)); }
-    catch (error) { request.log.error({ err: error }, 'weather request failed'); return reply.code(200).send({ answer: 'Current weather data is temporarily unavailable because the upstream service did not respond. Please try again shortly.', location: null, source: 'open-meteo', retrieved_at: new Date().toISOString() }); }
+    catch (error) {
+      request.log.error({ err: error }, 'weather request failed');
+      const label = kind === 'storm' ? 'Storm forecast' : kind === 'forecast' ? 'Weather forecast' : 'Current weather';
+      return reply.code(200).send({ answer: `${label} data is temporarily unavailable because the upstream service did not respond. Please try again shortly.`, location: null, source: 'open-meteo', retrieved_at: new Date().toISOString() });
+    }
   };
-  app.get('/weather', handler('current')); app.get('/forecast', handler('forecast'));
+  app.get('/weather', handler('current')); app.get('/forecast', handler('forecast')); app.get('/storm', handler('storm'));
   return app;
 }
 

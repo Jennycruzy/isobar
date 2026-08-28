@@ -11,6 +11,7 @@ on the Lightsail host `54.154.121.30`.
 
 - Telegraph registration: `#224`, `active`
 - Registered intents: `WEATHER_CHECK`, `WEATHER_FORECAST`
+- Local `STORM_ALERT` implementation is prepared but is not registered or live yet.
 - Baseline epoch: `284` (`WEATHER_CHECK #6/9`, `WEATHER_FORECAST #9/11`)
 - Latest available epoch-285 snapshot: `WEATHER_FORECAST #1/11`, score
   `0.008892506`; no Isobar `WEATHER_CHECK` row is available yet
@@ -33,7 +34,8 @@ npm start
 ```
 
 The service listens on `127.0.0.1:8080` by default. Routes are `/health`,
-`/weather`, and `/forecast`.
+`/weather`, `/forecast`, and the local `/storm` route prepared for a future
+`STORM_ALERT` registration.
 
 Canonical inputs are `/weather?q=...` and `/forecast?q=...&days=2`; `lat` and
 `lon` may replace `q`. For compatibility with evaluator-generated requests,
@@ -51,6 +53,7 @@ Examples:
 ```sh
 curl 'https://weather.isobars.xyz/weather?location=Tokyo'
 curl 'https://weather.isobars.xyz/forecast?city=Tokyo&start_time=2026-09-01T06:00:00Z&end_time=2026-09-01T12:00:00Z'
+curl 'http://127.0.0.1:8080/storm?q=Tokyo&hours=48'
 ```
 
 WEATHER_CHECK answers include the current temperature, feels-like temperature,
@@ -65,6 +68,13 @@ WEATHER_FORECAST answers contain a concise exact-window summary for short
 hour-based requests and the structured `forecast` array carries exactly the
 requested hourly values. Longer hourly requests use dated daily summaries plus
 hourly facts; the detailed measurements remain in JSON in both routes.
+
+The local `STORM_ALERT` path is forecast-derived rather than an official
+warning feed. It reports sustained wind, peak gusts, precipitation,
+thunderstorm hours, a deterministic risk score, and periods where sustained
+wind exceeds 25 knots. The structured response labels warning data as
+unavailable when the upstream source does not provide it; it does not invent
+an official warning or advisory.
 
 ## Use through Alexandria
 
